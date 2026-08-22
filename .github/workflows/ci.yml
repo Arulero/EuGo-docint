@@ -60,24 +60,45 @@ jobs:
   # the chart is packaged and pushed solely by release.yml on a v* / chart-v* tag.
   chart-lint:
     runs-on: ubuntu-latest
+    # Both Foundry endpoints are required by the chart -- a release that omits one fails to render
+    # rather than producing a pod guaranteed to refuse to start. So every render below has to supply
+    # them, including the "minimal values" ones, where the point is that nothing ELSE is set.
+    env:
+      FOUNDRY: >-
+        --set foundry.documentIntelligenceEndpoint=https://example-di.cognitiveservices.azure.com/
+        --set foundry.openAIEndpoint=https://example-aoai.openai.azure.com/
     steps:
       - uses: actions/checkout@v7
       - uses: azure/setup-helm@v5
       - run: helm lint charts/eugo-docint
       - run: helm template ci charts/eugo-docint -f charts/eugo-docint/ci/test-values.yaml > /dev/null
-      - run: helm template ci charts/eugo-docint --set image.repository=r.example/eugo-docint --set autoscaling.enabled=false > /dev/null
+      - run: helm template ci charts/eugo-docint $FOUNDRY --set image.repository=r.example/eugo-docint --set autoscaling.enabled=false > /dev/null
+      # The refusal itself, covered on its own. Without this only the success path is tested, which
+      # is the same asymmetry -- a fault that shows up nowhere it would be noticed -- that requiring
+      # the endpoints exists to remove. Both halves are asserted: the render must fail, AND the
+      # message must name the value, or a render broken for any other reason would pass this.
+      - name: rendering without an endpoint fails and names the value
+        run: |
+          set -uo pipefail
+          if out=$(helm template ci charts/eugo-docint --set image.repository=r.example/eugo-docint 2>&1); then
+            echo "::error::expected the render to fail with no endpoints set, but it succeeded"
+            exit 1
+          fi
+          echo "$out" | grep -q 'foundry.documentIntelligenceEndpoint is required
       # Regression gate for the read-only-root/XLSX bug: the pod runs with
       # readOnlyRootFilesystem, but OpenXML spills package parts to /tmp, so every XLSX
       # request fails with engine_error unless a writable volume is mounted there. Rendered
       # from the minimal values on purpose -- the mount must not depend on any value being
-      # set. Both halves are asserted: a volumeMount whose volume is missing renders fine
+      # set. The two endpoints are part of that minimum now, not an exception to it: they are
+      # what the chart requires to render at all, and the mount still depends on no value.
+      # Both halves are asserted: a volumeMount whose volume is missing renders fine
       # and only fails at apply time.
       # Rendered to a file rather than `helm template | tee f | grep -q`: grep -q exits on its
       # first match and can SIGPIPE tee mid-write, and volumeMounts renders before volumes,
       # so the emptyDir line is exactly the part that could be lost.
       - name: rendered pod mounts a writable /tmp
         run: |
-          helm template ci charts/eugo-docint --set image.repository=r.example/eugo-docint > rendered.yaml
+          helm template ci charts/eugo-docint $FOUNDRY --set image.repository=r.example/eugo-docint > rendered.yaml
           grep -q 'mountPath: /tmp' rendered.yaml
           grep -q 'emptyDir' rendered.yaml
       # A 0 must reach the pod, not be swallowed. Helm's `with` treats 0 as empty, so the limits

@@ -76,30 +76,31 @@ vocabulary.
 
 ## 4. Make the chart refuse to render without both endpoints
 
-- [ ] 4.1 Replace the `with` blocks for `foundry.documentIntelligenceEndpoint` and
+- [x] 4.1 Replace the `with` blocks for `foundry.documentIntelligenceEndpoint` and
       `foundry.openAIEndpoint` in `charts/eugo-docint/templates/deployment.yaml` with Helm's
       `required`, each naming its value in the message. Leave the `docint.*` limits on their existing
       is-set test — the reasoning in that template comment about `with` treating `0` as empty is
       unrelated and still applies.
-- [ ] 4.2 Delete the two `""` defaults from `charts/eugo-docint/values.yaml` and rewrite the comments
+- [x] 4.2 Delete the two `""` defaults from `charts/eugo-docint/values.yaml` and rewrite the comments
       that describe an empty value as omitting the variable and yielding `engine_unconfigured`
       "designed degraded mode".
-- [ ] 4.3 Update the four render commands that supply no endpoints: the minimal-values render and the
+- [x] 4.3 Update the render commands that supply no endpoints (three, not four — both `helm lint`
+      calls warn and still exit 0, as they already did for the required `image.repository`): the minimal-values render and the
       writable-`/tmp` regression gate in `.github/workflows/ci.yml`, and the two packaged-chart
       renders in `.github/workflows/release.yml`. Update the `/tmp` gate's comment to say the two
       endpoints are part of the minimal value set — its assertion, that the mount depends on no
       value, is unchanged and must stay.
-- [ ] 4.4 Add a CI step asserting a render *without* the endpoints fails and names the missing value,
+- [x] 4.4 Add a CI step asserting a render *without* the endpoints fails and names the missing value,
       so the new refusal is covered rather than only its success path.
-- [ ] 4.5 Set `version: 0.3.0` in `charts/eugo-docint/Chart.yaml`, tracking the image minor this
+- [x] 4.5 Set `version: 0.3.0` in `charts/eugo-docint/Chart.yaml`, tracking the image minor this
       change requires. Do not touch `appVersion` — CI stamps it at package time.
-- [ ] 4.6 Verify: `helm lint charts/eugo-docint`;
+- [x] 4.6 Verify: `helm lint charts/eugo-docint`;
       `helm template ci charts/eugo-docint -f charts/eugo-docint/ci/test-values.yaml`; the
       minimal-values render with both endpoints set; and a render with an endpoint omitted, which must
       fail. No pod security context or volume mount is touched by this group, so no real-pod
       verification is required — but if that changes, `helm lint` and `helm template` cannot catch it
       and a `kind` cluster with a BoM XLSX through `/v1/extract` is required.
-- [ ] 4.7 Gate: restore → build --no-restore → test --no-build against `src/DocInt.slnx`, so the chart
+- [x] 4.7 Gate: restore → build --no-restore → test --no-build against `src/DocInt.slnx`, so the chart
       change is verified against a green solution rather than on its own.
 
 ## 5. Documentation

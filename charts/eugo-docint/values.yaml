@@ -44,20 +44,22 @@ serviceAccount:
 # a key routed through values would sit in plaintext in the release manifest. In-cluster the pod
 # authenticates with Workload Identity -- set serviceAccount.azureClientId and leave keys unset.
 # See the README's "Credentials never go in values.yaml".
+# Both endpoints are REQUIRED and deliberately carry no default here: a release that omits one
+# fails to render, naming the value, rather than producing a pod that refuses to start. A default
+# that renders would be indistinguishable from a value an operator chose.
 foundry:
-  # Sets env Foundry__DocumentIntelligenceEndpoint,
-  # e.g. https://<resource>.cognitiveservices.azure.com/; empty omits the var and PDF/DOCX/PPTX/HTML
-  # answer engine_unconfigured per file (designed degraded mode)
-  documentIntelligenceEndpoint: ""
-  # Sets env Foundry__OpenAIEndpoint, e.g. https://<resource>.openai.azure.com/ — the resource
-  # root only; the SDK appends /openai/deployments/<name>/chat/completions. Empty omits the
-  # var and image files answer engine_unconfigured (designed degraded mode)
-  openAIEndpoint: ""
+  # documentIntelligenceEndpoint -- sets env Foundry__DocumentIntelligenceEndpoint,
+  #   e.g. https://<resource>.cognitiveservices.azure.com/. Serves PDF/DOCX/PPTX/HTML.
+  # openAIEndpoint -- sets env Foundry__OpenAIEndpoint,
+  #   e.g. https://<resource>.openai.azure.com/ (the resource root only; the SDK appends
+  #   /openai/deployments/<name>/chat/completions). Serves JPG/PNG.
+  # Both are listed here rather than set, because setting either to "" would render. Supply them
+  # per release: --set foundry.documentIntelligenceEndpoint=... or a values file.
+
   # Sets env Foundry__DeploymentNameVision; empty here omits the var and the image's
   # appsettings.json supplies model-eugo-docint-vision (a deployment alias, not a model
-  # name). A name is required once openAIEndpoint is set,
-  # so blanking it explicitly (via extraEnv) fails validation at pod start rather than
-  # failing every image request.
+  # name). The image requires a name unconditionally, so blanking it explicitly (via extraEnv)
+  # fails validation at pod start rather than failing every image request.
   deploymentNameVision: ""
 
 # Service limits. Each empty value omits its DocInt__* env var, leaving the image's
