@@ -17,7 +17,7 @@
       touching the file (a warm build recompiles nothing and reports zero warnings
       regardless) and confirm the count has dropped from 2 to 1, with the remaining one at
       the worksheet site.
-- [ ] 1.6 Merge to `main` once green; delete the branch.
+- [x] 1.6 Merge to `main` once green; delete the branch.
 
 ## 2. An unreadable sheet is skipped, the rest of the workbook still extracts
 
@@ -38,24 +38,24 @@
       Expect zero warnings solution-wide.
 - [x] 2.7 Confirm `git status` shows nothing changed under `tests/DocInt.Tests/golden/` —
       both inputs are derived in memory and no fixture is regenerated.
-- [ ] 2.8 Merge to `main` once green; delete the branch.
+- [x] 2.8 Merge to `main` once green; delete the branch.
 
 ## 3. Nullable warnings become build errors
 
 Ordered last on purpose: switched on before groups 1 and 2 land, it fails the build.
 
-- [ ] 3.1 Cut `chore/nullable-warnings-as-errors` from `main`.
-- [ ] 3.2 Add `Directory.Build.props` at the repo root setting `WarningsAsErrors` to append
+- [x] 3.1 Cut `chore/nullable-warnings-as-errors` from `main`.
+- [x] 3.2 Add `Directory.Build.props` at the repo root setting `WarningsAsErrors` to append
       the `nullable` category, leaving any inherited value intact. Scoped to that category
       only — see `design.md` for why a blanket setting is rejected against CI's floating
       `dotnet-version: 10.0.x`.
-- [ ] 3.3 Verify it binds to all five projects, not just `DocInt.Api`: build the solution
+- [x] 3.3 Verify it binds to all five projects, not just `DocInt.Api`: build the solution
       after a `--no-incremental` pass and confirm every project picks the property up.
-- [ ] 3.4 Verify the policy actually bites, then revert the probe: reintroduce one nullable
+- [x] 3.4 Verify the policy actually bites, then revert the probe: reintroduce one nullable
       dereference locally, confirm the build fails with `error CS8602` rather than a
       warning, and restore the file. A policy that is never observed failing is not
       verified.
-- [ ] 3.5 Green gate: `restore` → `build --no-restore` → `test --no-build` against
+- [x] 3.5 Green gate: `restore` → `build --no-restore` → `test --no-build` against
       `src/DocInt.slnx`, clean rather than warm, and confirm zero warnings and zero errors.
 - [ ] 3.6 Merge to `main` once green; delete the branch.
 
