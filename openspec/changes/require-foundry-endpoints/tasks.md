@@ -105,12 +105,12 @@ vocabulary.
 
 ## 5. Documentation
 
-- [ ] 5.1 Update `README.md`'s configuration reference: both endpoints are required, there is no
+- [x] 5.1 Update `README.md`'s configuration reference: both endpoints are required, there is no
       opt-out, and the local path for a host that cannot reach Azure is two `.invalid` URLs plus
       `DocInt__StartupProbe__Enabled=false`.
-- [ ] 5.2 Update `CLAUDE.md` where it describes blank endpoints as supported — the live-smoke section
+- [x] 5.2 Update `CLAUDE.md` where it describes blank endpoints as supported — the live-smoke section
       and the contract/testing notes that reference the `engine_unconfigured` path.
-- [ ] 5.3 Gate: restore → build --no-restore → test --no-build against `src/DocInt.slnx`.
+- [x] 5.3 Gate: restore → build --no-restore → test --no-build against `src/DocInt.slnx`.
 
 ## 6. Release and handoff
 

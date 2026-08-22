@@ -104,7 +104,9 @@ A corrupt or unsupported file never fails the request; it gets its own `error` e
 ```
 
 Error codes: `unsupported_type` · `too_large` · `empty_file` · `corrupt` · `timeout` ·
-`engine_error` · `engine_unconfigured`.
+`engine_error` · `engine_unconfigured`. The last is part of the frozen `v1` vocabulary but no
+running instance emits it: both endpoints are required, so a surface the service cannot serve is a
+boot failure rather than a per-file error.
 
 ### Request-level 400 and 503
 
@@ -132,10 +134,12 @@ dotnet run --project src/AppHost      # Aspire dashboard + telemetry (dev)
 dotnet run --project src/DocInt.Api   # plain service on http://localhost:8090
 ```
 
-Nothing has to be configured to boot. Azure engines activate when their endpoint is set;
-unconfigured ones answer with per-file `engine_unconfigured` while every other kind works
-normally. Endpoints and credentials go in user-secrets or environment variables —
-see [Configuration](#-configuration).
+Both Foundry endpoints must be configured to boot. A blank or missing one refuses start-up and
+names the value, rather than coming up healthy and answering `engine_unconfigured` for every file
+that surface would have served. There is no opt-out — where the endpoints are legitimately
+unreachable, supply them anyway and turn off the boot-time dial (see
+[Startup connectivity check](#startup-connectivity-check)). Endpoints and credentials go in
+user-secrets or environment variables — see [Configuration](#-configuration).
 
 ## 🔧 Configuration
 
@@ -194,10 +198,10 @@ truth, nothing to drift.
       "RetryAfterSeconds": 5
     }
   },
-  // The one Azure AI Foundry account this service talks to. Both endpoints are blank by design —
-  // they are environment-specific and never committed. Supply them via user-secrets or env; blank
-  // keeps the stub-first path, where that surface's file kinds answer engine_unconfigured while
-  // the rest of the service works normally.
+  // The one Azure AI Foundry account this service talks to. Neither endpoint appears here — they
+  // are environment-specific and never committed, and both are REQUIRED: the host refuses to start
+  // without them rather than answering engine_unconfigured for every file the missing surface
+  // would have served. Supply them via user-secrets or env.
   "Foundry": {
     // Foundry__ApiKey — key1 or key2, and there is no third: a Foundry account has ONE key pair
     // covering every API it exposes, so this single value authenticates both endpoints below.
@@ -205,10 +209,12 @@ truth, nothing to drift.
     //
     // Foundry__DocumentIntelligenceEndpoint, https://<resource>.cognitiveservices.azure.com/
     // Serves PDF/DOCX/PPTX/HTML via the built-in prebuilt-layout model — no deployment name.
-    "DocumentIntelligenceEndpoint": "",
+    //
     // Foundry__OpenAIEndpoint, https://<resource>.openai.azure.com/ — the resource root only;
     // the SDK appends /openai/deployments/<name>/chat/completions. Serves JPG/PNG.
-    "OpenAIEndpoint": "",
+    //
+    // Deliberately absent rather than present-and-empty: an empty value reads as a default
+    // someone chose, and both spellings fail the boot identically anyway.
     // A deployment ALIAS, not a model name — deliberately decoupled from the model behind it
     // (EuGo-infra docs/naming-convention.md, model-<project>-<role>). The model can change on
     // the Foundry side without touching this file; do not "correct" it to the model's name.
@@ -240,8 +246,8 @@ truth, nothing to drift.
 | `DocInt:Admission:QueueTimeoutSeconds` | `10` | `docint.admission.queueTimeoutSeconds` | How long a request waits for budget before being shed. Most bursts drain well inside it and still answer 200 |
 | `DocInt:Admission:RetryAfterSeconds` | `5` | `docint.admission.retryAfterSeconds` | The `Retry-After` value on the 503 sent to a shed request. See [Request-level 400 and 503](#request-level-400-and-503) |
 | `Foundry:ApiKey` | *unset — not in `appsettings.json`* | none, by design | `key1` **or** `key2` from the Foundry account — one key pair covers every API it exposes, so this single value authenticates both endpoints below. Omit it and **both** surfaces use `DefaultAzureCredential`; it is one decision for the account, so they cannot disagree |
-| `Foundry:DocumentIntelligenceEndpoint` | `""` | `foundry.documentIntelligenceEndpoint` | `https://<resource>.cognitiveservices.azure.com/`. Serves PDF/DOCX/PPTX/HTML through the built-in `prebuilt-layout` model — no deployment name involved. Blank leaves those kinds on `engine_unconfigured` |
-| `Foundry:OpenAIEndpoint` | `""` | `foundry.openAIEndpoint` | `https://<resource>.openai.azure.com/` — the resource root only; the SDK appends `/openai/deployments/<name>/chat/completions`. Serves JPG/PNG |
+| `Foundry:DocumentIntelligenceEndpoint` | *(none — required)* | `foundry.documentIntelligenceEndpoint` | `https://<resource>.cognitiveservices.azure.com/`. Serves PDF/DOCX/PPTX/HTML through the built-in `prebuilt-layout` model — no deployment name involved. **Required**: blank or missing refuses the boot |
+| `Foundry:OpenAIEndpoint` | *(none — required)* | `foundry.openAIEndpoint` | `https://<resource>.openai.azure.com/` — the resource root only; the SDK appends `/openai/deployments/<name>/chat/completions`. Serves JPG/PNG. **Required**, on the same terms |
 | `Foundry:DeploymentNameVision` | `model-eugo-docint-vision` | `foundry.deploymentNameVision` | A deployment **alias**, not a model name — decoupled on purpose (EuGo-infra `docs/naming-convention.md`, `model-<project>-<role>`) so the model behind it can change without touching the service. Don't "correct" it to the model's name |
 | `DocInt:Metrics:Enabled` | `true` | `metrics.enabled` | The Prometheus scrape route. `false` removes it — a `404`, not an empty `200`, so a dashboard cannot read "off" as "no traffic" |
 | `DocInt:Metrics:Path` | `/metrics` | `metrics.path` | Route the exposition is served on; must be rooted, or the pod fails to boot. The chart's scrape annotation reads the same value |
@@ -278,8 +284,9 @@ of the container's entire memory limit, which Kestrel used to be configured to a
 
 **Validated at boot, not on first request.** Every number above must be positive — the five
 `DocInt:*` limits, `DuplicateTracking:Capacity`, and the `Admission` budget and timings — both
-endpoints must be absolute URIs, and `DeploymentNameVision` is required once `Foundry:OpenAIEndpoint`
-is set. A retired configuration key carrying a value fails here too. Four *relationships* are
+endpoints must be **present** and absolute URIs, and `DeploymentNameVision` is required
+unconditionally — it was already required whenever `Foundry:OpenAIEndpoint` was set, and that is now
+always. A retired configuration key carrying a value fails here too. Four *relationships* are
 enforced as well, each because violating it fails silently at runtime rather than loudly at boot:
 
 - `MaxRequestFileBytes` ≥ `MaxFileBytes` — otherwise one maximum-size file is inadmissible.
@@ -311,8 +318,9 @@ If an endpoint stays unreachable the host does not start and the process exits 1
 CrashLoopBackOff whose logs name the endpoint and the status, instead of a healthy pod that turns
 every PDF into a per-file `engine_error` only the caller ever sees. The rules:
 
-- **A blank endpoint is skipped.** The stub-first deployment is still legal; only an endpoint
-  someone asked for is one the service must be able to reach.
+- **There is no blank endpoint to skip.** Both are required, so there is always exactly one probe
+  per surface — a missing value fails earlier still, in configuration validation, and says so
+  rather than reporting a network fault.
 - **Three attempts, but only for transport failures and 408/429/5xx** — the blips a pod hits when
   its node's DNS or the Workload-Identity token endpoint is still warming up. A definitive status
   (401, 403, 404) means the service answered, and retrying a denied identity or a wrong deployment
@@ -321,7 +329,13 @@ every PDF into a per-file `engine_error` only the caller ever sees. The rules:
 
 Turn it off with `DocInt:StartupProbe:Enabled=false` where the endpoints are unreachable **by
 design** — the common case being a developer machine outside the VNet, since `aif-eugo-swc` has
-`publicNetworkAccess: Disabled` and answers only through its private endpoint:
+`publicNetworkAccess: Disabled` and answers only through its private endpoint.
+
+**This skips the dial, not the values.** Requiring an endpoint and reaching it are separate
+decisions: an endpoint is a hostname, not a credential, so both must still be supplied. On a machine
+with no Azure at all, any absolute URI works — `https://document-intelligence.invalid/` and
+`https://openai.invalid/` are what the test suite uses, since `.invalid` is reserved by RFC 2606 and
+resolves nowhere:
 
 ```powershell
 $env:DocInt__StartupProbe__Enabled = 'false'; dotnet run --project src/DocInt.Api
@@ -359,8 +373,10 @@ chiseled image has no shell), so a container needs a real identity leg or an API
 
 A background monitor re-dials each configured endpoint every
 `DocInt:DependencyCheck:IntervalSeconds` and records the verdict; the endpoint reads that
-record, so no request ever waits on Azure. Only configured endpoints appear — a stub-first
-deployment shows just `self`. In the window between boot and the first round a dependency reads
+record, so no request ever waits on Azure. Both surfaces always appear, because both endpoints are
+required — an unreported surface used to mean an unconfigured one, and that absence was invisible
+from the deployment in every direction. In the window between boot and the first round a
+dependency reads
 `Degraded` with the reason `not yet checked`: a fresh pod never inherits a verdict it did not
 make itself.
 
@@ -500,11 +516,12 @@ with"* when none exists. The chart is at `0.2.0`, so a `chart-v0.2.*` tag cannot
 `v0.2.0` has been cut. Nothing in the repository can be edited to satisfy this — it is a
 tagging-order constraint, and it is invisible until CI runs.
 
-**Don't install chart `0.2.x` over a `0.1.x` image.** The chart renders `Foundry__*` variables,
-which only the `0.2.x` image reads; a `0.1.x` image reads the retired `DocumentIntelligence__*` /
+**Don't install chart `0.2.x`+ over a `0.1.x` image.** The chart renders `Foundry__*` variables,
+which only the `0.2.x`+ image reads; a `0.1.x` image reads the retired `DocumentIntelligence__*` /
 `AzureOpenAI__*` names and would come up with **no** endpoints configured — every Azure-served kind
-answering `engine_unconfigured`, with no boot failure to catch it, because the retired-key check
-ships in the new image. Since `image.tag: ""` means `.Chart.AppVersion` and `appVersion` is stamped
+answering `engine_unconfigured`, with no boot failure to catch it, because both the retired-key
+check and the required-endpoint rule ship in the newer image. From `0.3.0` the same skew is caught
+at the pod, not by the caller: that image refuses to start without both endpoints. Since `image.tag: ""` means `.Chart.AppVersion` and `appVersion` is stamped
 at package time, an unpinned install from a working tree whose `appVersion` still reads `0.1.0`
 hits exactly this. Version skew was harmless before this change; it is not any more.
 
