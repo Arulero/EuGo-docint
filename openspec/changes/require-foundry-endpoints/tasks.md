@@ -36,19 +36,20 @@ endpoints and fails to start. Splitting them leaves the gate red between groups.
 
 ## 2. Register both probes and both dependency checks unconditionally
 
-- [ ] 2.1 Replace `StartupConnectivityCheckTests.No_endpoint_configured_registers_no_probe`, whose
+- [x] 2.1 (landed with group 1, which is what made its premise unreachable) Replace
+      `StartupConnectivityCheckTests.No_endpoint_configured_registers_no_probe`, whose
       premise is now a boot failure, with a test asserting that both probes and both dependency health
       checks are registered whenever the service starts at all.
-- [ ] 2.2 Add a test asserting `/health` reports both dependency surfaces, closing the gap where an
+- [x] 2.2 Add a test asserting `/health` reports both dependency surfaces, closing the gap where an
       unconfigured surface was registered as no health check and appeared nowhere in the report.
-- [ ] 2.3 Remove the two `IsSet` guards from `AddStartupConnectivityCheck` in
+- [x] 2.3 Remove the two `IsSet` guards from `AddStartupConnectivityCheck` in
       `src/DocInt.Api/Startup/StartupConnectivityCheck.cs` and update the extension method's summary,
       which describes registering "nothing at all when both are blank".
-- [ ] 2.4 Rewrite the `Endpoint` property comments in `DocumentIntelligenceStartupProbe` and
+- [x] 2.4 Rewrite the `Endpoint` property comments in `DocumentIntelligenceStartupProbe` and
       `AzureOpenAIStartupProbe` — "registered only when non-blank" is no longer the guarantee;
       validation is. Leave both constructors' `Lazy<T>` deferral exactly as it is: it is load-bearing
       for the resolution-order hazard and removing the guards does not change that.
-- [ ] 2.5 Gate: restore → build --no-restore → test --no-build against `src/DocInt.slnx`.
+- [x] 2.5 Gate: restore → build --no-restore → test --no-build against `src/DocInt.slnx`.
 
 ## 3. Remove the `IsConfigured` seam
 

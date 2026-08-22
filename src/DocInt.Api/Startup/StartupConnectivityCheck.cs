@@ -160,13 +160,21 @@ public sealed class StartupConnectivityCheck(
 public static class StartupConnectivityCheckExtensions
 {
     /// <summary>
-    /// Registers a probe per configured endpoint, and nothing at all when both are blank — the
-    /// stub-first deployment stays legal, and only an endpoint someone actually asked for is
-    /// treated as one the service must be able to reach.
+    /// Registers one probe per API surface, unconditionally — both endpoints are required, so a
+    /// surface the service will not verify is a surface it cannot have been configured with.
     /// </summary>
     /// <remarks>
-    /// The periodic health checks are registered here too, from the same condition, so the two
-    /// lists cannot drift: one configured endpoint, one probe, one check.
+    /// The periodic health checks are registered here too, from the same list, so the two cannot
+    /// drift: one surface, one probe, one check. Registration used to be conditional on the
+    /// endpoint being set, which meant an unconfigured surface was registered as no health check at
+    /// all and appeared nowhere in /health — the absence was invisible from the deployment in every
+    /// direction, which is part of what let it survive.
+    ///
+    /// Both probe constructors defer every read of their options behind a Lazy, and that is
+    /// load-bearing here: hosted services are resolved before ValidateOnStart runs, so an eager
+    /// read would raise a resolution failure ahead of the validator's clean message naming the key.
+    /// Removing the guards below does not change that hazard, but it does remove what used to keep
+    /// a blank value away from these constructors.
     /// </remarks>
     public static WebApplicationBuilder AddStartupConnectivityCheck(this WebApplicationBuilder builder)
     {
@@ -175,24 +183,18 @@ public static class StartupConnectivityCheckExtensions
         // One account, two surfaces: the probes stay per-surface because reachability is per-host —
         // the private endpoint, DNS and TLS are resolved separately for each — and the health-check
         // names below describe the surface being dialled, not the resource behind it.
-        if (IsSet(builder, $"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint"))
-        {
-            builder.Services.AddSingleton<IStartupProbe, DocumentIntelligenceStartupProbe>();
-            if (dependencyChecks)
-            {
-                AddDependencyCheck(builder, DocumentIntelligenceStartupProbe.ServiceName,
-                    builder.Configuration[$"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint"]!);
-            }
-        }
+        builder.Services.AddSingleton<IStartupProbe, DocumentIntelligenceStartupProbe>();
+        builder.Services.AddSingleton<IStartupProbe, AzureOpenAIStartupProbe>();
 
-        if (IsSet(builder, $"{FoundryOptions.SectionName}:OpenAIEndpoint"))
+        if (dependencyChecks)
         {
-            builder.Services.AddSingleton<IStartupProbe, AzureOpenAIStartupProbe>();
-            if (dependencyChecks)
-            {
-                AddDependencyCheck(builder, AzureOpenAIStartupProbe.ServiceName,
-                    builder.Configuration[$"{FoundryOptions.SectionName}:OpenAIEndpoint"]!);
-            }
+            // Read straight from configuration, which at registration time has not been validated
+            // yet — hence the fallback rather than a null-forgiving "!". A blank value here cannot
+            // reach a served request: ValidateOnStart rejects it before Kestrel binds.
+            AddDependencyCheck(builder, DocumentIntelligenceStartupProbe.ServiceName,
+                builder.Configuration[$"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint"] ?? "");
+            AddDependencyCheck(builder, AzureOpenAIStartupProbe.ServiceName,
+                builder.Configuration[$"{FoundryOptions.SectionName}:OpenAIEndpoint"] ?? "");
         }
 
         builder.Services.AddHostedService<StartupConnectivityCheck>();
@@ -224,7 +226,4 @@ public static class StartupConnectivityCheckExtensions
     private static bool DependencyCheckEnabled(WebApplicationBuilder builder) =>
         !bool.TryParse(builder.Configuration[$"{DependencyCheckOptions.SectionName}:Enabled"], out var enabled)
         || enabled;
-
-    private static bool IsSet(WebApplicationBuilder builder, string key) =>
-        !string.IsNullOrWhiteSpace(builder.Configuration[key]);
 }
