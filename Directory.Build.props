@@ -1,0 +1,16 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- Nullable diagnostics are errors here, not warnings. Both CS8602 sites this repo shipped
+         with survived a month and six commits to their own file because a warm incremental build
+         recompiles nothing and reports zero warnings — so "0 warnings" locally meant "nothing
+         compiled", not "clean", and every fresh sighting read as a new regression.
+         Scoped to the nullable category rather than TreatWarningsAsErrors: CI pins
+         dotnet-version: 10.0.x, which floats, so a blanket setting lets an SDK or analyzer bump
+         redden the build with no commit behind it — and a gate that fails for reasons nobody
+         caused is a gate people switch off.
+         Appended rather than assigned, so a project can add its own codes without dropping this. -->
+    <WarningsAsErrors>$(WarningsAsErrors);nullable</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
