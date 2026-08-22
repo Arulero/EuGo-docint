@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Net;
+using System.Text.Json;
 using DocInt.Api.Contracts;
 using DocInt.Api.Engines;
 using DocumentFormat.OpenXml;
@@ -75,6 +77,46 @@ public class SpreadsheetEngineTests
         Assert.Equal(7m, data.Rows[1][1]);
         Assert.Contains(outcome.Result.Warnings, w => w.Contains("Chart1") && w.Contains("skipped"));
         Assert.Equal(1, outcome.PagesProcessed);
+    }
+
+    // --- Regression: a package that opens but whose workbook part holds no content. OpenXML
+    // returns null for such a part's root element ("returns null when the current part is empty
+    // or is not an XML content type"); that null used to reach an unguarded dereference and
+    // surface as engine_error carrying a runtime null-reference message. Package damage is
+    // exactly what the corrupt code is for. ---
+
+    [Fact]
+    public async Task Empty_workbook_part_maps_to_corrupt_not_engine_error()
+    {
+        var outcome = await Run(WithEmptiedEntry("bom.xlsx", "xl/workbook.xml"),
+            "empty-workbook-part.xlsx");
+
+        Assert.Equal(ErrorCodes.Corrupt, outcome.Result.Error!.Code);
+        Assert.Contains("workbook part is empty", outcome.Result.Error.Message);
+        Assert.Null(outcome.Result.Tables);
+        Assert.Null(outcome.Result.Markdown);
+    }
+
+    [Fact]
+    public async Task Http_contract_isolates_a_damaged_workbook_from_a_readable_one()
+    {
+        using var factory = new ContractTestFactory();
+        using var form = Multipart.Form(
+            ("bom.xlsx", Golden.Bytes("bom.xlsx"),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ("empty-workbook-part.xlsx", WithEmptiedEntry("bom.xlsx", "xl/workbook.xml"),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+
+        var response = await factory.CreateClient().PostAsync("/v1/extract", form);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = JsonSerializer.Deserialize<ExtractResponse>(
+            await response.Content.ReadAsStringAsync(), DocIntJson.Options)!;
+
+        Assert.Equal(2, result.Files.Count);
+        Assert.Null(result.Files[0].Error);
+        Assert.NotEmpty(result.Files[0].Tables!);
+        Assert.Equal(ErrorCodes.Corrupt, result.Files[1].Error!.Code);
     }
 
     [Fact]
@@ -288,6 +330,31 @@ public class SpreadsheetEngineTests
             workbookPart.Workbook.Save();
         }
         return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Rewrites one entry of a committed fixture to zero bytes. The result is still a valid zip,
+    /// the part is still declared in [Content_Types].xml and still related from the workbook —
+    /// only its content is gone, which is the shape OpenXML reports as a null root element.
+    /// Derived here rather than committed to golden/ for the reason given above BuildXlsx.
+    /// </summary>
+    private static byte[] WithEmptiedEntry(string fixture, string entryPath)
+    {
+        using var source = new ZipArchive(new MemoryStream(Golden.Bytes(fixture)), ZipArchiveMode.Read);
+        Assert.Contains(entryPath, source.Entries.Select(e => e.FullName));
+
+        var output = new MemoryStream();
+        using (var target = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in source.Entries)
+            {
+                using var written = target.CreateEntry(entry.FullName).Open();
+                if (entry.FullName == entryPath) continue;
+                using var read = entry.Open();
+                read.CopyTo(written);
+            }
+        }
+        return output.ToArray();
     }
 
     private static S.Row Row(uint index, params S.Cell[] cells)

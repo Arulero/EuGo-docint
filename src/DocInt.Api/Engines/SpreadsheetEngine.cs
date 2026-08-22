@@ -33,6 +33,11 @@ public sealed class SpreadsheetEngine : IExtractionEngine
             using var doc = SpreadsheetDocument.Open(ms, isEditable: false);
             var workbookPart = doc.WorkbookPart
                 ?? throw new InvalidDataException("workbook part missing");
+            // The part can be present and hold nothing — OpenXML reports an empty part as a null
+            // root element. That is package damage, so it takes the same path as a missing part
+            // rather than reading as a workbook that merely happens to declare no sheets.
+            var workbook = workbookPart.Workbook
+                ?? throw new InvalidDataException("workbook part is empty");
 
             var sharedStrings = workbookPart.SharedStringTablePart?.SharedStringTable?
                 .Elements<S.SharedStringItem>().Select(i => i.InnerText).ToArray() ?? [];
@@ -40,7 +45,7 @@ public sealed class SpreadsheetEngine : IExtractionEngine
 
             var warnings = new List<string>(file.Warnings);
             var tables = new List<TableResult>();
-            var sheets = workbookPart.Workbook.Sheets?.Elements<S.Sheet>().ToArray() ?? [];
+            var sheets = workbook.Sheets?.Elements<S.Sheet>().ToArray() ?? [];
             foreach (var sheet in sheets)
             {
                 var sheetName = sheet.Name?.Value ?? "Sheet";
