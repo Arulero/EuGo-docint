@@ -7,10 +7,10 @@ namespace DocInt.Tests;
 
 /// <summary>
 /// The live suite hosts the app through <see cref="LiveAppFactory"/> rather than the base factory,
-/// because the base one blanks both Foundry endpoints on purpose. That blanking is what keeps the
-/// offline suite hermetic, and it silently neutered every live test: the host booted unconfigured,
-/// so each one failed with engine_unconfigured no matter what the environment said. It went
-/// unnoticed because the live suite is env-gated and the endpoints were unreachable anyway.
+/// because the base one pins both Foundry endpoints to a name that cannot resolve. That pinning is
+/// what keeps the offline suite hermetic, and it silently neutered every live test: the host booted
+/// against the wrong endpoints no matter what the environment said. It went unnoticed because the
+/// live suite is env-gated and the endpoints were unreachable anyway.
 /// </summary>
 public class LiveAppFactoryTests
 {
@@ -39,8 +39,12 @@ public class LiveAppFactoryTests
         }
     }
 
+    // The other half of the same contract, and the one that keeps the offline suite honest: an
+    // endpoint exported into the environment -- or sitting in an untracked appsettings.Development
+    // .json -- must not reach a host the base factory built. It cannot be blanked any more, because
+    // a blank endpoint no longer boots, so it is pinned to a name that resolves nowhere instead.
     [Fact]
-    public void Base_factory_still_blanks_the_endpoints()
+    public void Base_factory_pins_the_endpoints_somewhere_unreachable()
     {
         const string di = "https://should-be-ignored.cognitiveservices.azure.com/";
         var prior = Environment.GetEnvironmentVariable("Foundry__DocumentIntelligenceEndpoint");
@@ -51,7 +55,9 @@ public class LiveAppFactoryTests
             using var factory = new DocIntAppFactory();
             var options = factory.Services.GetRequiredService<IOptions<FoundryOptions>>().Value;
 
-            Assert.True(string.IsNullOrEmpty(options.DocumentIntelligenceEndpoint));
+            Assert.Equal(DocIntAppFactory.DocumentIntelligenceEndpoint,
+                options.DocumentIntelligenceEndpoint);
+            Assert.EndsWith(".invalid/", options.DocumentIntelligenceEndpoint);
         }
         finally
         {

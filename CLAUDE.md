@@ -37,7 +37,7 @@ That exact three-step sequence, in that order, is the enforced gate before any m
 
 Run a single test: `dotnet test --no-build src/DocInt.slnx --filter "FullyQualifiedName~TestName"`.
 
-Run the app two ways: `dotnet run --project src/AppHost` (Aspire dashboard + OTLP telemetry, preferred for dev) or `dotnet run --project src/DocInt.Api` directly on `http://localhost:8090` (8089 belongs to the siblings). Credentials via user-secrets/env locally (endpoint without key → `DefaultAzureCredential`), Workload Identity on AKS. Config keys: `DocumentIntelligence:*`, `AzureOpenAI:*`, `DocInt:*` — see the design doc's table.
+Run the app two ways: `dotnet run --project src/AppHost` (Aspire dashboard + OTLP telemetry, preferred for dev) or `dotnet run --project src/DocInt.Api` directly on `http://localhost:8090` (8089 belongs to the siblings). Credentials via user-secrets/env locally (endpoint without key → `DefaultAzureCredential`), Workload Identity on AKS. Config keys: `Foundry:*`, `DocInt:*` — see the README's configuration reference. **Both `Foundry:*Endpoint` values are required**: the host refuses to start without them, with no opt-out. Off the VNet, supply them anyway (`https://document-intelligence.invalid/`, `https://openai.invalid/` — RFC 2606, resolves nowhere) and set `DocInt__StartupProbe__Enabled=false`, which skips the boot-time dial and nothing else.
 
 ## Architecture
 
@@ -73,6 +73,8 @@ The Helm chart lives in `charts/eugo-docint` (per the 2026-07-26 design spec, su
 | XLSX | OpenXML typed cells + Markdown rendering (`tables` carries the typed rows — numeric fidelity is the point) |
 | JPG/PNG | Vision description via Foundry utility model — **factual observations only**, no classification language |
 
+`engine_unconfigured` remains in the frozen `v1` error vocabulary but no running instance emits it: both endpoints are required, so a surface the service cannot serve is a boot failure, not a per-file error. `ContractsSerializationTests` pins the whole vocabulary so an unused-constant cleanup cannot narrow the contract.
+
 **Task order:** T1 scaffold → T2 contract/stubs (freezes the wire contract), then T3 layout · T4 spreadsheet · T5 vision in parallel; T6 hardening; T7 AKS deploy (blocked on infra). EuGo-Web integration (T8) proceeds against T2's stubs and lives in the EuGo-Web plan.
 
 ## Hard constraints (from the spec — apply to every change)
@@ -103,6 +105,10 @@ export Foundry__OpenAIEndpoint=https://<resource>.openai.azure.com/
 export Foundry__ApiKey=<key>   # ONE key for both — omit to use DefaultAzureCredential (az login)
 dotnet test --no-build src/DocInt.slnx --filter "FullyQualifiedName~LiveSmokeTests"
 ```
+
+Both endpoint exports are load-bearing beyond the skip gates: the host itself refuses to start
+without them. The offline suite supplies its own unreachable `.invalid` values through
+`DocIntAppFactory`, so only the live suite needs the real ones.
 
 **Disconnect any corporate VPN client first.** Exporting the variables is not sufficient: a client
 that pins DNS to its own resolver (GlobalProtect, measured 2026-08-19) forges NXDOMAIN for every

@@ -25,7 +25,9 @@ public class HealthEndpointsTests : IClassFixture<DocIntAppFactory>
         Assert.Equal("Healthy", doc.RootElement.GetProperty("status").GetString());
         var names = doc.RootElement.GetProperty("checks").EnumerateArray()
             .Select(c => c.GetProperty("name").GetString()!).ToArray();
-        Assert.Equal(["self"], names);   // no endpoint configured, so no dependency checks
+        // Dependency checks are switched off in the base factory, so only "self" reports. Not
+        // "no endpoint is configured" any more — both always are; see DependencyReportingTests.
+        Assert.Equal(["self"], names);
     }
 
     [Fact]
@@ -161,5 +163,64 @@ public class DegradedDependencyTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+    }
+}
+
+/// <summary>
+/// Every API surface is reported, always. Registration used to be conditional on the endpoint
+/// being set, so an unconfigured surface was registered as no health check at all and appeared
+/// nowhere in the body — invisible from the deployment in every direction, which is part of what
+/// let a half-configured pod look healthy while it failed every file that surface served.
+/// </summary>
+public class DependencyReportingTests
+{
+    private sealed class SilentProbe(string service, string endpoint) : IStartupProbe
+    {
+        public string Service => service;
+        public string Endpoint => endpoint;
+        public Task ProbeAsync(CancellationToken ct) =>
+            Task.FromException(new RequestFailedException(403, "Public access is disabled."));
+    }
+
+    private sealed class ReportingFactory : DocIntAppFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            // Explicitly on: the base factory turns the monitor off so no test dials by accident,
+            // and this test is about what the report contains.
+            builder.UseSetting($"{DependencyCheckOptions.SectionName}:Enabled", "true");
+            base.ConfigureWebHost(builder);
+        }
+
+        protected override void ConfigureFakes(IServiceCollection services)
+        {
+            // Fakes so the monitor still never dials: which checks exist is decided at
+            // registration, so nothing here needs a real round trip to assert.
+            services.RemoveAll<IStartupProbe>();
+            services.AddSingleton<IStartupProbe>(new SilentProbe(
+                DocumentIntelligenceStartupProbe.ServiceName,
+                DocIntAppFactory.DocumentIntelligenceEndpoint));
+            services.AddSingleton<IStartupProbe>(new SilentProbe(
+                AzureOpenAIStartupProbe.ServiceName, DocIntAppFactory.OpenAIEndpoint));
+        }
+    }
+
+    [Fact]
+    public async Task Health_reports_every_dependency_surface()
+    {
+        using var factory = new ReportingFactory();
+        var response = await factory.CreateClient().GetAsync("/health");
+
+        // 200 regardless of what the dependencies say: a dependency outage must never evict the
+        // pod, and adding a second reported surface must not have changed that.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var names = doc.RootElement.GetProperty("checks").EnumerateArray()
+            .Select(c => c.GetProperty("name").GetString()!).ToArray();
+
+        Assert.Contains("self", names);
+        Assert.Contains(DocumentIntelligenceStartupProbe.ServiceName, names);
+        Assert.Contains(AzureOpenAIStartupProbe.ServiceName, names);
     }
 }

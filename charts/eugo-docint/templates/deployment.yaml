@@ -59,12 +59,15 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
           {{- $env := list }}
-          {{- with .Values.foundry.documentIntelligenceEndpoint }}
-          {{- $env = append $env (dict "name" "Foundry__DocumentIntelligenceEndpoint" "value" .) }}
-          {{- end }}
-          {{- with .Values.foundry.openAIEndpoint }}
-          {{- $env = append $env (dict "name" "Foundry__OpenAIEndpoint" "value" .) }}
-          {{- end }}
+          {{- /* `required`, not `with`: both endpoints are required by the service, and a release
+                 that omits one renders a pod guaranteed to refuse to start. Failing here moves that
+                 from a crash-looping rollout to a message on the operator's terminal naming the
+                 value. There is deliberately no default in values.yaml -- a default that renders is
+                 indistinguishable from a value someone chose. */}}
+          {{- $di := required "foundry.documentIntelligenceEndpoint is required: the service refuses to start without it (e.g. https://<resource>.cognitiveservices.azure.com/)" .Values.foundry.documentIntelligenceEndpoint }}
+          {{- $env = append $env (dict "name" "Foundry__DocumentIntelligenceEndpoint" "value" $di) }}
+          {{- $aoai := required "foundry.openAIEndpoint is required: the service refuses to start without it (e.g. https://<resource>.openai.azure.com/)" .Values.foundry.openAIEndpoint }}
+          {{- $env = append $env (dict "name" "Foundry__OpenAIEndpoint" "value" $aoai) }}
           {{- with .Values.foundry.deploymentNameVision }}
           {{- $env = append $env (dict "name" "Foundry__DeploymentNameVision" "value" .) }}
           {{- end }}

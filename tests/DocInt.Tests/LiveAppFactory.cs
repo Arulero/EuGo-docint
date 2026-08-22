@@ -6,12 +6,12 @@ namespace DocInt.Tests;
 /// <summary>
 /// Hosts the app for the live smoke suite, against the real Foundry resource.
 ///
-/// The base factory blanks both Foundry endpoints so the offline suite stays hermetic even on a
-/// developer machine whose appsettings.Development.json carries real ones. That is correct there
-/// and fatal here: the blanking wins over the environment, so a live test booted an unconfigured
-/// host and failed with engine_unconfigured regardless of what was exported. This factory carries
-/// the environment's values in before calling base, which leaves them alone -- Blank only fills a
-/// key that is still empty.
+/// The base factory pins both Foundry endpoints to a name that cannot resolve, so the offline suite
+/// stays hermetic even on a developer machine whose appsettings.Development.json carries real ones.
+/// That is correct there and fatal here: the pinning wins over the environment, so a live test
+/// booted against the wrong host regardless of what was exported. This factory carries the
+/// environment's values in before calling base, which leaves them alone -- the base factory fills
+/// only a key that is absent.
 /// </summary>
 public class LiveAppFactory : DocIntAppFactory
 {

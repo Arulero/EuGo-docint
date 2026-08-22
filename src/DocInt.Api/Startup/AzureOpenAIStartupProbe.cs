@@ -52,7 +52,11 @@ public sealed class AzureOpenAIStartupProbe : IStartupProbe
 
     public string Service => ServiceName;
 
-    /// <summary>Read after validation has passed; registered only when non-blank.</summary>
+    /// <summary>
+    /// Read after validation has passed, which is what guarantees it is non-blank — the probe is
+    /// now registered unconditionally, so registration no longer carries that guarantee. The
+    /// fallback is for the window before validation runs, never for a served request.
+    /// </summary>
     public string Endpoint => _options.Value.OpenAIEndpoint ?? "";
 
     public async Task ProbeAsync(CancellationToken ct)

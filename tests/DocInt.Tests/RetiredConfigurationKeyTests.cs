@@ -59,9 +59,9 @@ public class RetiredConfigurationKeyTests
     }
 
     // Load-bearing, not an edge case. The un-prefixed environment-variable provider folds the whole
-    // process environment into IConfiguration, and DocIntAppFactory deliberately blanks endpoint
-    // keys so the offline suite cannot reach real Azure. A check that fired on presence rather than
-    // on a value would reject configurations that select nothing — and would fail this repository's
+    // process environment into IConfiguration, so a retired name left behind empty by a migration
+    // arrives here whether anyone meant it to or not. A check that fired on presence rather than on
+    // a value would reject configurations that select nothing — and would fail this repository's
     // own test suite on any machine where the old names linger empty.
     [Theory]
     [InlineData("")]
@@ -105,6 +105,9 @@ public class RetiredConfigurationKeyTests
             // connectivity failure is genuinely available to be reported instead.
             new KeyValuePair<string, string?>("Foundry:DocumentIntelligenceEndpoint",
                 "https://unreachable.invalid/"),
+            // Required like the one above, and supplied so the only configuration fault in play is
+            // the retired key this test is about.
+            new KeyValuePair<string, string?>("Foundry:OpenAIEndpoint", DocIntAppFactory.OpenAIEndpoint),
             new KeyValuePair<string, string?>($"{StartupProbeOptions.SectionName}:Enabled", "true"),
             new KeyValuePair<string, string?>($"{DependencyCheckOptions.SectionName}:Enabled", "false"),
         ]);
@@ -138,9 +141,19 @@ public class RetiredConfigurationKeyTests
     /// </summary>
     private static void Validate(params (string Key, string Value)[] settings)
     {
+        // Both Foundry endpoints are required, so a case about retired keys has to supply them or
+        // it would fail for a reason it is not testing. They point at a name that cannot resolve,
+        // which is safe here because nothing in this class dials anything.
+        var values = new Dictionary<string, string?>
+        {
+            [$"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint"] =
+                DocIntAppFactory.DocumentIntelligenceEndpoint,
+            [$"{FoundryOptions.SectionName}:OpenAIEndpoint"] = DocIntAppFactory.OpenAIEndpoint,
+        };
+        foreach (var (key, value) in settings) values[key] = value;
+
         var builder = WebApplication.CreateBuilder();
-        builder.Configuration.AddInMemoryCollection(
-            settings.Select(s => new KeyValuePair<string, string?>(s.Key, s.Value)));
+        builder.Configuration.AddInMemoryCollection(values);
         builder.AddDocIntOptions();
         using var app = builder.Build();
         app.Services.GetRequiredService<IStartupValidator>().Validate();
