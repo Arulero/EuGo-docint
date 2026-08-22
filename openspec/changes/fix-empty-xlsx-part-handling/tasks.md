@@ -21,22 +21,22 @@
 
 ## 2. An unreadable sheet is skipped, the rest of the workbook still extracts
 
-- [ ] 2.1 Cut `fix/xlsx-empty-worksheet-part` from `main`.
-- [ ] 2.2 Add a failing test: rezip `bom.xlsx` with one of its two `xl/worksheets/sheet*.xml`
+- [x] 2.1 Cut `fix/xlsx-empty-worksheet-part` from `main`.
+- [x] 2.2 Add a failing test: rezip `bom.xlsx` with one of its two `xl/worksheets/sheet*.xml`
       entries blanked, and assert no file-level error, a warning naming the skipped sheet
       and its cause, and the other sheet present in `tables` with its cell values intact.
       Confirm it first fails by returning `engine_error` and no tables at all.
-- [ ] 2.3 Add the all-sheets-unreadable case: no error, one warning per skipped sheet, no
+- [x] 2.3 Add the all-sheets-unreadable case: no error, one warning per skipped sheet, no
       tables — the boundary the skip-and-continue rule implies.
-- [ ] 2.4 Move the sheet-root null test into the per-sheet loop beside the existing
+- [x] 2.4 Move the sheet-root null test into the per-sheet loop beside the existing
       not-a-worksheet skip, with its own warning wording, and pass the worksheet root
       rather than the part into the row reader so the reader has nothing nullable left.
-- [ ] 2.5 Confirm the existing chartsheet test still passes unchanged — it covers the
+- [x] 2.5 Confirm the existing chartsheet test still passes unchanged — it covers the
       other branch of the same skip and is the regression guard for this edit.
-- [ ] 2.6 Green gate: `restore` → `build --no-restore` → `test --no-build` against
+- [x] 2.6 Green gate: `restore` → `build --no-restore` → `test --no-build` against
       `src/DocInt.slnx`, after touching the engine file so it genuinely recompiles.
       Expect zero warnings solution-wide.
-- [ ] 2.7 Confirm `git status` shows nothing changed under `tests/DocInt.Tests/golden/` —
+- [x] 2.7 Confirm `git status` shows nothing changed under `tests/DocInt.Tests/golden/` —
       both inputs are derived in memory and no fixture is regenerated.
 - [ ] 2.8 Merge to `main` once green; delete the branch.
 
