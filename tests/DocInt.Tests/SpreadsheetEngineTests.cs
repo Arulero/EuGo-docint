@@ -119,6 +119,42 @@ public class SpreadsheetEngineTests
         Assert.Equal(ErrorCodes.Corrupt, result.Files[1].Error!.Code);
     }
 
+    // --- Same null root element, one level down: a worksheet part that is present and empty.
+    // That is one damaged tab, not a damaged file — the workbook's readable sheets must still
+    // come back, exactly as they do for a tab holding a chart or dialog. ---
+
+    [Fact]
+    public async Task Empty_worksheet_part_skips_that_sheet_and_keeps_the_rest()
+    {
+        // bom.xlsx is BoM -> sheet1.xml, Notes -> sheet2.xml; blanking Notes leaves the
+        // typed-cell sheet as the survivor worth asserting on.
+        var outcome = await Run(WithEmptiedEntry("bom.xlsx", "xl/worksheets/sheet2.xml"),
+            "empty-worksheet-part.xlsx");
+
+        Assert.Null(outcome.Result.Error);
+        Assert.Contains(outcome.Result.Warnings,
+            w => w.Contains("Notes") && w.Contains("skipped") && w.Contains("empty"));
+
+        var bom = Assert.Single(outcome.Result.Tables!);
+        Assert.Equal("BoM", bom.Name);
+        Assert.Equal("M3 screw", bom.Rows[1][0]);
+        Assert.Equal(19.99m, bom.Rows[1][2]);      // the surviving sheet's cells are untouched
+        Assert.Equal(1, outcome.PagesProcessed);
+    }
+
+    [Fact]
+    public async Task Workbook_whose_every_sheet_is_unreadable_warns_and_yields_no_tables()
+    {
+        var outcome = await Run(
+            WithEmptiedEntry("bom.xlsx", "xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml"),
+            "no-readable-sheet.xlsx");
+
+        Assert.Null(outcome.Result.Error);
+        Assert.Equal(2, outcome.Result.Warnings.Count(w => w.Contains("skipped")));
+        Assert.Empty(outcome.Result.Tables!);
+        Assert.Equal(0, outcome.PagesProcessed);
+    }
+
     [Fact]
     public async Task Http_contract_returns_typed_json_numbers()
     {
@@ -338,10 +374,11 @@ public class SpreadsheetEngineTests
     /// only its content is gone, which is the shape OpenXML reports as a null root element.
     /// Derived here rather than committed to golden/ for the reason given above BuildXlsx.
     /// </summary>
-    private static byte[] WithEmptiedEntry(string fixture, string entryPath)
+    private static byte[] WithEmptiedEntry(string fixture, params string[] entryPaths)
     {
         using var source = new ZipArchive(new MemoryStream(Golden.Bytes(fixture)), ZipArchiveMode.Read);
-        Assert.Contains(entryPath, source.Entries.Select(e => e.FullName));
+        var present = source.Entries.Select(e => e.FullName).ToArray();
+        Assert.All(entryPaths, path => Assert.Contains(path, present));
 
         var output = new MemoryStream();
         using (var target = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
@@ -349,7 +386,7 @@ public class SpreadsheetEngineTests
             foreach (var entry in source.Entries)
             {
                 using var written = target.CreateEntry(entry.FullName).Open();
-                if (entry.FullName == entryPath) continue;
+                if (entryPaths.Contains(entry.FullName)) continue;
                 using var read = entry.Open();
                 read.CopyTo(written);
             }

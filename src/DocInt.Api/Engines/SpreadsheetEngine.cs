@@ -60,7 +60,15 @@ public sealed class SpreadsheetEngine : IExtractionEngine
                     warnings.Add($"sheet '{sheetName}' skipped: not a worksheet");
                     continue;
                 }
-                var rows = ReadRows(worksheetPart, sharedStrings, dateStyles, warnings);
+                // A worksheet part can equally be present and hold nothing, which OpenXML reports
+                // the same way. One damaged tab is not a damaged file: skip it as above, so the
+                // workbook's readable sheets still come back.
+                if (worksheetPart.Worksheet is not { } worksheet)
+                {
+                    warnings.Add($"sheet '{sheetName}' skipped: worksheet part is empty");
+                    continue;
+                }
+                var rows = ReadRows(worksheet, sharedStrings, dateStyles, warnings);
                 tables.Add(new TableResult(sheetName, RenderMarkdown(rows), rows));
             }
             if (sheets.Length == 0) warnings.Add("workbook has no sheets");
@@ -90,10 +98,10 @@ public sealed class SpreadsheetEngine : IExtractionEngine
     }
 
     private static List<IReadOnlyList<object?>> ReadRows(
-        WorksheetPart worksheetPart, string[] sharedStrings, HashSet<uint> dateStyles, List<string> warnings)
+        S.Worksheet worksheet, string[] sharedStrings, HashSet<uint> dateStyles, List<string> warnings)
     {
         var grid = new List<IReadOnlyList<object?>>();
-        var sheetData = worksheetPart.Worksheet.GetFirstChild<S.SheetData>();
+        var sheetData = worksheet.GetFirstChild<S.SheetData>();
         if (sheetData is null) return grid;
 
         var maxColumns = 0;
