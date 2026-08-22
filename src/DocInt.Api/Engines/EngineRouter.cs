@@ -41,10 +41,6 @@ public sealed class EngineRouter
             // no client left to answer, so propagate instead of manufacturing a per-file error.
             throw;
         }
-        catch (EngineUnconfiguredException ex)
-        {
-            return Errors.For(file, ErrorCodes.EngineUnconfigured, ex.Message);
-        }
         catch (Exception ex)
         {
             // Any other exception, including a stray OperationCanceledException from an

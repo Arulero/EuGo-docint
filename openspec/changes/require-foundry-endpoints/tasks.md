@@ -56,18 +56,21 @@ endpoints and fails to start. Splitting them leaves the gate red between groups.
 Design D3. `ErrorCodes.EngineUnconfigured` stays — this group removes code, never contract
 vocabulary.
 
-- [ ] 3.1 Delete `LayoutEngineTests.Unconfigured_client_yields_engine_unconfigured` and
+- [x] 3.1 Delete `LayoutEngineTests.Unconfigured_client_yields_engine_unconfigured` and
       `VisionEngineTests.Unconfigured_client_yields_engine_unconfigured`, and drop the `IsConfigured`
       member from every fake client in the test suite.
-- [ ] 3.2 Remove `IsConfigured` from `ILayoutAnalysisClient` and `IVisionChatClient`, and from
+- [x] 3.2 Remove `IsConfigured` from `ILayoutAnalysisClient` and `IVisionChatClient`, and from
       `AzureLayoutAnalysisClient` and `AzureVisionChatClient`. Simplify both clients' construction so
       the underlying client is non-nullable — the endpoint is guaranteed present.
-- [ ] 3.3 Remove the guards at the top of `LayoutEngine.ExtractAsync` and `VisionEngine.ExtractAsync`,
+- [x] 3.3 Remove the guards at the top of `LayoutEngine.ExtractAsync` and `VisionEngine.ExtractAsync`,
       the `EngineUnconfiguredException` throws in both Azure clients, the exception type in
       `src/DocInt.Api/Engines/Errors.cs`, and its `catch` clause in `EngineRouter.RouteAsync`.
-- [ ] 3.4 Confirm `ErrorCodes.EngineUnconfigured` is still defined and still covered by whatever
+- [x] 3.4 Confirm `ErrorCodes.EngineUnconfigured` is still defined and still covered by whatever
       contract test enumerates the per-file error vocabulary; the `/v1` wire contract does not change.
-- [ ] 3.5 Gate: restore → build --no-restore → test --no-build against `src/DocInt.slnx`. Nullable
+      *(No such test existed, and after 3.3 the constant had no reference anywhere — one code-deleting
+      cleanup away from a silent contract narrowing. Added `The_per_file_error_vocabulary_is_the_frozen_v1_set`,
+      which pins the whole set by reflection in both directions.)*
+- [x] 3.5 Gate: restore → build --no-restore → test --no-build against `src/DocInt.slnx`. Nullable
       warnings are build errors in this repo, so 3.2's non-nullable change either compiles clean or
       is not done.
 

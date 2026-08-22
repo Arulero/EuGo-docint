@@ -18,10 +18,8 @@ public sealed class FakeEngine(IReadOnlyCollection<FileKind> kinds, Func<FileIte
 }
 
 public sealed class FakeLayoutClient(
-    LayoutAnalysis? result = null, bool configured = true, Action? thrower = null) : ILayoutAnalysisClient
+    LayoutAnalysis? result = null, Action? thrower = null) : ILayoutAnalysisClient
 {
-    public bool IsConfigured => configured;
-
     public Task<LayoutAnalysis> AnalyzeAsync(BinaryData content, CancellationToken ct)
     {
         thrower?.Invoke();
@@ -30,12 +28,10 @@ public sealed class FakeLayoutClient(
 }
 
 public sealed class FakeVisionClient(
-    string description = "VISION_DESCRIPTION_SENTINEL", bool configured = true) : IVisionChatClient
+    string description = "VISION_DESCRIPTION_SENTINEL") : IVisionChatClient
 {
     public string? LastSystemPrompt { get; private set; }
     public string? LastMediaType { get; private set; }
-
-    public bool IsConfigured => configured;
 
     public Task<string> DescribeImageAsync(string systemPrompt, BinaryData image, string mediaType, CancellationToken ct)
     {

@@ -5,6 +5,5 @@ public sealed record LayoutAnalysis(string Markdown, int PageCount, IReadOnlyLis
 /// <summary>Thin seam over Azure Document Intelligence — the test fake boundary and credential boundary.</summary>
 public interface ILayoutAnalysisClient
 {
-    bool IsConfigured { get; }
     Task<LayoutAnalysis> AnalyzeAsync(BinaryData content, CancellationToken ct);
 }

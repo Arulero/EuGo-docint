@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using DocInt.Api.Contracts;
 
@@ -43,5 +44,33 @@ public class ContractsSerializationTests
         Assert.Equal("pdf", FileKind.Pdf.Name());
         Assert.Equal("xlsx", FileKind.Xlsx.Name());
         Assert.Equal("image", FileKind.Image.Name());
+    }
+
+    /// <summary>
+    /// The per-file error vocabulary, pinned whole. Both directions matter: a new code is a v1
+    /// contract change a caller has to be told about, and a deleted one is the same in reverse.
+    /// </summary>
+    /// <remarks>
+    /// engine_unconfigured is why this test exists. No configuration can produce it any more —
+    /// both Foundry endpoints are required, so a surface the service cannot serve is a boot
+    /// failure rather than a per-file error — which leaves the constant with no reference anywhere
+    /// in the service. That is exactly the state in which an "unused constant" cleanup deletes it,
+    /// silently narrowing the contract. It stays defined because withdrawing a code costs a caller
+    /// a change and buys nothing.
+    /// </remarks>
+    [Fact]
+    public void The_per_file_error_vocabulary_is_the_frozen_v1_set()
+    {
+        var declared = typeof(ErrorCodes)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(f => f is { IsLiteral: true, IsInitOnly: false } && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .OrderBy(code => code, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            ["corrupt", "empty_file", "engine_error", "engine_unconfigured", "timeout", "too_large",
+             "unsupported_type"],
+            declared);
     }
 }

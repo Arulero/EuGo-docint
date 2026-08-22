@@ -9,26 +9,26 @@ namespace DocInt.Api.Engines;
 
 public sealed class AzureVisionChatClient : IVisionChatClient
 {
-    private readonly ChatClient? _chat;
+    private readonly ChatClient _chat;
 
+    /// <remarks>
+    /// No unconfigured branch, for the reason given on AzureLayoutAnalysisClient: the endpoint and
+    /// the deployment alias are both required, so a blank one refuses the boot rather than
+    /// producing a client that answers engine_unconfigured for every image.
+    /// </remarks>
     public AzureVisionChatClient(IOptions<FoundryOptions> options)
     {
         var o = options.Value;
-        if (string.IsNullOrWhiteSpace(o.OpenAIEndpoint)) return;
-        var endpoint = new Uri(o.OpenAIEndpoint);
+        var endpoint = new Uri(o.OpenAIEndpoint!);
         var azureClient = FoundryCredential.UsesApiKey(o)
             ? new AzureOpenAIClient(endpoint, new AzureKeyCredential(o.ApiKey!))
             : new AzureOpenAIClient(endpoint, new DefaultAzureCredential());
         _chat = azureClient.GetChatClient(o.DeploymentNameVision);
     }
 
-    public bool IsConfigured => _chat is not null;
-
     public async Task<string> DescribeImageAsync(
         string systemPrompt, BinaryData image, string mediaType, CancellationToken ct)
     {
-        if (_chat is null)
-            throw new EngineUnconfiguredException("Foundry:OpenAIEndpoint is not configured");
         var completion = await _chat.CompleteChatAsync(
             [
                 new SystemChatMessage(systemPrompt),

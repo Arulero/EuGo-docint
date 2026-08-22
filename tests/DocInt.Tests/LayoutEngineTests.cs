@@ -26,14 +26,6 @@ public class LayoutEngineTests
     }
 
     [Fact]
-    public async Task Unconfigured_client_yields_engine_unconfigured()
-    {
-        var engine = new LayoutEngine(new FakeLayoutClient(configured: false));
-        var outcome = await engine.ExtractAsync(Pdf(), CancellationToken.None);
-        Assert.Equal(ErrorCodes.EngineUnconfigured, outcome.Result.Error!.Code);
-    }
-
-    [Fact]
     public async Task Service_content_rejection_maps_to_corrupt()
     {
         var engine = new LayoutEngine(new FakeLayoutClient(

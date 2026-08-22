@@ -25,14 +25,6 @@ public class VisionEngineTests
     }
 
     [Fact]
-    public async Task Unconfigured_client_yields_engine_unconfigured()
-    {
-        var outcome = await new VisionEngine(new FakeVisionClient(configured: false))
-            .ExtractAsync(Png(), CancellationToken.None);
-        Assert.Equal(ErrorCodes.EngineUnconfigured, outcome.Result.Error!.Code);
-    }
-
-    [Fact]
     public void Prompt_snapshot_pins_the_guardrail_wording()
     {
         // Deliberate double-entry bookkeeping: the guardrail cannot drift silently.

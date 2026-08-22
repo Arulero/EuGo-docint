@@ -2,8 +2,6 @@ using DocInt.Api.Contracts;
 
 namespace DocInt.Api.Engines;
 
-public sealed class EngineUnconfiguredException(string message) : Exception(message);
-
 public static class Errors
 {
     public static EngineOutcome For(FileItem file, string code, string message) =>
