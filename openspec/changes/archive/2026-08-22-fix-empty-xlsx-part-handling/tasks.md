@@ -57,7 +57,7 @@ Ordered last on purpose: switched on before groups 1 and 2 land, it fails the bu
       verified.
 - [x] 3.5 Green gate: `restore` → `build --no-restore` → `test --no-build` against
       `src/DocInt.slnx`, clean rather than warm, and confirm zero warnings and zero errors.
-- [ ] 3.6 Merge to `main` once green; delete the branch.
+- [x] 3.6 Merge to `main` once green; delete the branch.
 
 ## 4. Close-out
 
@@ -68,4 +68,4 @@ Ordered last on purpose: switched on before groups 1 and 2 land, it fails the bu
       Nothing here touches the Azure-backed engines, the chart, or the pod security
       context, so none of them gates this change — but list the skip explicitly rather
       than reporting a full pass.
-- [ ] 4.3 Archive the change once merged: `openspec archive fix-empty-xlsx-part-handling`.
+- [x] 4.3 Archive the change once merged: `openspec archive fix-empty-xlsx-part-handling`.
