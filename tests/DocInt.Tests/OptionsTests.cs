@@ -1,4 +1,5 @@
 using DocInt.Api.Configuration;
+using DocInt.Api.Startup;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,32 +53,114 @@ public class OptionsTests
         }
     }
 
-    // The two surfaces stay independently optional: the account advertises Document Intelligence
-    // only on cognitiveservices and Azure OpenAI only on openai, so one host configured without
-    // the other is a legal deployment, not a half-finished one.
+    // Every endpoint is required. A blank one used to be a supported deployment mode: the pod came
+    // up healthy, passed both probes, and answered engine_unconfigured for every file the missing
+    // surface served -- a fault visible only inside a caller's response body and nowhere in the
+    // deployment. An unreachable endpoint produces that same symptom and already refuses the boot;
+    // this closes the half that did not. Absent, empty and whitespace are one case, because a key
+    // set to spaces is an omission someone has to be told about, not a value.
     [Theory]
-    [InlineData("Foundry:DocumentIntelligenceEndpoint")]
-    [InlineData("Foundry:OpenAIEndpoint")]
-    public void Either_endpoint_alone_is_a_valid_configuration(string key) =>
-        Validate((key, "https://one.example/"),
-                 ("Foundry:DeploymentNameVision", "model-eugo-docint-vision"));
+    [InlineData("Foundry:DocumentIntelligenceEndpoint", null)]
+    [InlineData("Foundry:DocumentIntelligenceEndpoint", "")]
+    [InlineData("Foundry:DocumentIntelligenceEndpoint", "   ")]
+    [InlineData("Foundry:OpenAIEndpoint", null)]
+    [InlineData("Foundry:OpenAIEndpoint", "")]
+    [InlineData("Foundry:OpenAIEndpoint", "   ")]
+    public void Missing_endpoint_fails_host_startup(string key, string? value)
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => Validate((key, value)));
+        Assert.Contains(key["Foundry:".Length..], ex.Message);
 
-    // The vision deployment name is required only once an endpoint exists: AzureVisionChatClient
-    // returns early on a blank endpoint, so a name is meaningless without one. Blank-with-endpoint
-    // used to reach GetChatClient(""), failing every image request; it now fails at boot instead.
+        // Control: the same helper with both endpoints supplied validates clean, so it is the
+        // missing value that fails and not the rule.
+        Validate();
+    }
+
+    // There is deliberately no way to turn the rule above off. An opt-out would leave "the
+    // operator forgot" and "the operator meant it" expressed as the same configuration, which is
+    // the ambiguity the rule exists to remove -- so turning off the boot-time dial, the one knob
+    // that sounds like it should help, must not also excuse the value.
+    [Fact]
+    public void Disabling_the_startup_probe_does_not_excuse_a_missing_endpoint()
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => Validate(
+            ("DocInt:StartupProbe:Enabled", "false"),
+            ("Foundry:OpenAIEndpoint", "")));
+        Assert.Contains("OpenAIEndpoint", ex.Message);
+
+        // ...and with the value supplied, a host that cannot reach it still boots: an endpoint is
+        // a hostname, not a credential, so requiring it and dialling it stay separate decisions.
+        Validate(("DocInt:StartupProbe:Enabled", "false"));
+    }
+
+    // The refusal has to arrive as the validator's message, not as a dependency-resolution failure.
+    // Hosted services -- and through them every IStartupProbe -- are constructed before
+    // ValidateOnStart runs, so a probe that read its options eagerly would throw mid-resolution,
+    // pre-empt the clean message naming the key, and leave the host with no hosted-service list to
+    // dispose. Both probe constructors defer that read behind a Lazy<T>; this is what pins it, and
+    // it is why removing the registration guards in AddStartupConnectivityCheck stays safe.
+    // Started through a real host rather than a WebApplicationFactory: a factory boot that fails
+    // surfaces as ObjectDisposedException, which would match any startup failure at all -- including
+    // the resolution failure this test exists to rule out. app.StartAsync() gives the real
+    // exception, and it is the only shape that actually resolves the hosted services first.
+    [Fact]
+    public async Task A_missing_endpoint_is_reported_by_the_validator_not_by_dependency_resolution()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [$"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint"] = "",
+            [$"{FoundryOptions.SectionName}:OpenAIEndpoint"] = DocIntAppFactory.OpenAIEndpoint,
+            // Off, so nothing dials: this test is about which failure is reported, not about
+            // reachability, and a probe that ran would give the wrong one a chance to win.
+            [$"{StartupProbeOptions.SectionName}:Enabled"] = "false",
+            [$"{DependencyCheckOptions.SectionName}:Enabled"] = "false",
+        });
+        builder.AddDocIntOptions();
+        builder.AddStartupConnectivityCheck();
+        using var app = builder.Build();
+
+        var thrown = await Assert.ThrowsAnyAsync<Exception>(() => app.StartAsync());
+
+        var validation = Unwrap(thrown).OfType<OptionsValidationException>().FirstOrDefault();
+        Assert.NotNull(validation);
+        Assert.Contains("DocumentIntelligenceEndpoint", validation.Message);
+    }
+
+    /// <summary>The thrown exception and everything nested inside it, aggregates included.</summary>
+    private static IEnumerable<Exception> Unwrap(Exception ex)
+    {
+        var pending = new Queue<Exception>([ex]);
+        while (pending.Count > 0)
+        {
+            var current = pending.Dequeue();
+            yield return current;
+            if (current is AggregateException aggregate)
+            {
+                foreach (var inner in aggregate.InnerExceptions) pending.Enqueue(inner);
+            }
+            else if (current.InnerException is not null)
+            {
+                pending.Enqueue(current.InnerException);
+            }
+        }
+    }
+
+    // The vision deployment name is required unconditionally, which it became by consequence
+    // rather than by decision: it was already required whenever the image-description endpoint was
+    // set, and that endpoint is now always set. A blank name used to reach GetChatClient(""),
+    // failing every image request; it fails at boot instead.
     // Driven through IStartupValidator rather than WebApplicationFactory: a failed factory boot
     // surfaces as ObjectDisposedException, which would pass for any startup failure at all.
     [Fact]
-    public void Blank_vision_deployment_with_endpoint_fails_validation()
+    public void Blank_vision_deployment_fails_validation()
     {
         var ex = Assert.Throws<OptionsValidationException>(() => Validate(
-            ("Foundry:OpenAIEndpoint", "https://aoai.example"),
             ("Foundry:DeploymentNameVision", "")));
         Assert.Contains("DeploymentNameVision", ex.Message);
 
-        // Control: same endpoint, name present — proves the blank name is what fails, not the helper.
-        Validate(("Foundry:OpenAIEndpoint", "https://aoai.example"),
-            ("Foundry:DeploymentNameVision", "model-eugo-docint-vision"));
+        // Control: name present — proves the blank name is what fails, not the helper.
+        Validate(("Foundry:DeploymentNameVision", "model-eugo-docint-vision"));
     }
 
     // The chart renders these limits so a 0 reaches the pod rather than being swallowed
@@ -120,34 +203,27 @@ public class OptionsTests
         Validate();
     }
 
-    private static void Validate(params (string Key, string Value)[] settings)
+    // Both endpoints are required, so every case that is not about them has to supply them or it
+    // would fail for the wrong reason. A null value means "do not supply this key at all", which
+    // is how the absent case below differs from the blank one.
+    private static void Validate(params (string Key, string? Value)[] settings)
     {
+        var values = new Dictionary<string, string?>
+        {
+            [$"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint"] =
+                DocIntAppFactory.DocumentIntelligenceEndpoint,
+            [$"{FoundryOptions.SectionName}:OpenAIEndpoint"] = DocIntAppFactory.OpenAIEndpoint,
+        };
+        foreach (var (key, value) in settings)
+        {
+            if (value is null) values.Remove(key); else values[key] = value;
+        }
+
         var builder = WebApplication.CreateBuilder();
-        builder.Configuration.AddInMemoryCollection(
-            settings.Select(s => new KeyValuePair<string, string?>(s.Key, s.Value)));
+        builder.Configuration.AddInMemoryCollection(values);
         builder.AddDocIntOptions();
         using var app = builder.Build();
         app.Services.GetRequiredService<IStartupValidator>().Validate();
-    }
-
-    // ...and the stub-first path is untouched: no endpoint, no name, still boots.
-    [Fact]
-    public void Blank_vision_deployment_without_endpoint_still_boots()
-    {
-        using var factory = new BlankVisionDeploymentFactory(endpoint: null);
-        var o = factory.Services.GetRequiredService<IOptions<FoundryOptions>>().Value;
-        Assert.True(string.IsNullOrEmpty(o.DeploymentNameVision));
-    }
-
-    private sealed class BlankVisionDeploymentFactory(string? endpoint) : DocIntAppFactory
-    {
-        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
-        {
-            builder.UseSetting($"{FoundryOptions.SectionName}:DeploymentNameVision", "");
-            if (endpoint is not null)
-                builder.UseSetting($"{FoundryOptions.SectionName}:OpenAIEndpoint", endpoint);
-            base.ConfigureWebHost(builder);
-        }
     }
 
     [Fact]
@@ -172,11 +248,9 @@ public class OptionsTests
 
     // --- Regression: a present-but-invalid endpoint used to boot cleanly and then 500 every
     // /v1/extract call (new Uri(o.Endpoint) throwing UriFormatException during DI resolution
-    // of the real Azure adapter, upstream of the router's try/catch). Garbage config must now
-    // fail loudly at boot instead. Absent config (the stub-first path) must keep booting fine —
-    // covered by ExtractContractTests.Unconfigured_layout_engine_yields_per_file_engine_unconfigured
-    // and HealthEndpointsTests.Health_returns_healthy, both of which run a bare DocIntAppFactory
-    // with no endpoint configured at all.
+    // of the real Azure adapter, upstream of the router's try/catch). Garbage config must fail
+    // loudly at boot instead. Absent config is no longer the separate, gentler case it was — it
+    // is the same boot failure, covered by Missing_endpoint_fails_host_startup above.
 
     [Theory]
     [InlineData("Foundry:DocumentIntelligenceEndpoint")]

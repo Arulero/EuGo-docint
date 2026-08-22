@@ -113,15 +113,6 @@ public class ExtractContractTests : IClassFixture<ContractTestFactory>
         Assert.Null(result.Files[1].Error);
     }
 
-    [Fact]
-    public async Task Unconfigured_layout_engine_yields_per_file_engine_unconfigured()
-    {
-        using var bare = new DocIntAppFactory();   // real adapters, no Azure config
-        using var form = Multipart.Form(("manual.pdf", TestBytes.Pdf, "application/pdf"));
-        var result = await ReadResponse(await bare.CreateClient().PostAsync("/v1/extract", form));
-        Assert.Equal(ErrorCodes.EngineUnconfigured, result.Files[0].Error!.Code);
-    }
-
     private sealed class CappedFactory : ContractTestFactory
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)

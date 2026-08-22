@@ -51,14 +51,21 @@ public sealed class FoundryOptions
     /// <summary>key1 or key2 from the account. Blank means DefaultAzureCredential, for both surfaces.</summary>
     public string? ApiKey { get; set; }
 
-    /// <summary>https://&lt;resource&gt;.cognitiveservices.azure.com/ — serves PDF/DOCX/PPTX/HTML.</summary>
+    /// <summary>
+    /// https://&lt;resource&gt;.cognitiveservices.azure.com/ — serves PDF/DOCX/PPTX/HTML. Required:
+    /// blank fails ValidateOnStart rather than degrading the kinds this surface serves.
+    /// </summary>
     public string? DocumentIntelligenceEndpoint { get; set; }
 
-    /// <summary>https://&lt;resource&gt;.openai.azure.com/ — the resource root only; serves JPG/PNG.</summary>
+    /// <summary>
+    /// https://&lt;resource&gt;.openai.azure.com/ — the resource root only; serves JPG/PNG.
+    /// Required, on the same terms as the endpoint above.
+    /// </summary>
     public string? OpenAIEndpoint { get; set; }
 
-    // "" is absence, not a default: the shipped name lives only in appsettings.json, and a blank
-    // value is legal exactly while no endpoint is configured (the stub-first path).
+    // "" is absence, not a default: the shipped name lives only in appsettings.json. Absence now
+    // fails ValidateOnStart unconditionally, because the endpoint that used to make this
+    // conditional is itself required.
     public string DeploymentNameVision { get; set; } = "";
 }
 
@@ -281,19 +288,34 @@ public static class OptionsExtensions
             new RetiredFoundryKeys(builder.Configuration));
         builder.Services.AddOptions<FoundryOptions>()
             .Bind(builder.Configuration.GetSection(FoundryOptions.SectionName))
-            // Each endpoint is independently optional: the account serves the two APIs on two
-            // hosts, and configuring one without the other is a legal deployment — the unserved
-            // kinds answer engine_unconfigured per file rather than failing the request.
+            // Every endpoint is required. A blank one used to be a supported deployment mode, and
+            // the pod it produced came up healthy, passed both probes, and answered
+            // engine_unconfigured for every file the missing surface served — a fault visible only
+            // inside a caller's response body and nowhere in the deployment. An unreachable
+            // endpoint produces that exact symptom and already refuses the boot; this closes the
+            // half that did not.
+            // There is deliberately no opt-out. A flag would leave an operator's omission and an
+            // operator's intent expressed as the same configuration, which is the ambiguity this
+            // rule exists to remove. A host that genuinely cannot reach the resource still supplies
+            // both values — they are hostnames, not credentials — and turns off the dialling with
+            // DocInt:StartupProbe:Enabled=false. Requiring a value and dialling it stay separate
+            // decisions, which is also why this lives here and not in the connectivity check.
+            .Validate(o => !string.IsNullOrWhiteSpace(o.DocumentIntelligenceEndpoint),
+                $"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint is required")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.OpenAIEndpoint),
+                $"{FoundryOptions.SectionName}:OpenAIEndpoint is required")
+            // Still guarded on blank, so a missing value reports the one clean "is required" above
+            // rather than that plus a second complaint about a URI it was never given.
             .Validate(o => string.IsNullOrWhiteSpace(o.DocumentIntelligenceEndpoint)
                         || Uri.TryCreate(o.DocumentIntelligenceEndpoint, UriKind.Absolute, out _),
                 $"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint must be an absolute URI")
             .Validate(o => string.IsNullOrWhiteSpace(o.OpenAIEndpoint)
                         || Uri.TryCreate(o.OpenAIEndpoint, UriKind.Absolute, out _),
                 $"{FoundryOptions.SectionName}:OpenAIEndpoint must be an absolute URI")
-            .Validate(o => string.IsNullOrWhiteSpace(o.OpenAIEndpoint)
-                        || !string.IsNullOrWhiteSpace(o.DeploymentNameVision),
-                $"{FoundryOptions.SectionName}:DeploymentNameVision is required when "
-                + $"{FoundryOptions.SectionName}:OpenAIEndpoint is set")
+            // Unconditional by consequence rather than by decision: it was already required
+            // whenever OpenAIEndpoint was set, and OpenAIEndpoint is now always set.
+            .Validate(o => !string.IsNullOrWhiteSpace(o.DeploymentNameVision),
+                $"{FoundryOptions.SectionName}:DeploymentNameVision is required")
             .ValidateOnStart();
         return builder;
     }

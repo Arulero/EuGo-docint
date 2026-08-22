@@ -71,13 +71,15 @@ public class StartupConnectivityCheckTests
         }
     }
 
-    // The stub-first contract, unchanged: a blank endpoint is a legal deployment, so there is
-    // nothing to reach and the check must register no probe rather than pass vacuously.
+    // Both endpoints are required, so "no endpoint configured" is no longer a deployment the check
+    // has to have an answer for -- it is a boot failure, covered by OptionsTests. What is left to
+    // assert is the invariant that replaced it: a service that starts at all has one probe per
+    // surface, so there is no configuration in which a surface goes unverified.
     [Fact]
-    public void No_endpoint_configured_registers_no_probe()
+    public void A_service_that_starts_has_a_probe_for_every_surface()
     {
         using var factory = new DocIntAppFactory();
-        Assert.Empty(factory.Services.GetServices<IStartupProbe>());
+        Assert.Equal(2, factory.Services.GetServices<IStartupProbe>().Count());
     }
 
     [Fact]
