@@ -61,9 +61,9 @@ Ordered last on purpose: switched on before groups 1 and 2 land, it fails the bu
 
 ## 4. Close-out
 
-- [ ] 4.1 Run the gate once more on `main` with `--no-incremental` to confirm the merged
+- [x] 4.1 Run the gate once more on `main` with `--no-incremental` to confirm the merged
       result is clean from cold, not just on each branch.
-- [ ] 4.2 Record what could not run: `LiveSmokeTests` self-skips without `DOCINT_LIVE_TESTS`
+- [x] 4.2 Record what could not run: `LiveSmokeTests` self-skips without `DOCINT_LIVE_TESTS`
       and a network path into the VNet, and the Docker and chart jobs run only in CI.
       Nothing here touches the Azure-backed engines, the chart, or the pod security
       context, so none of them gates this change — but list the skip explicitly rather
