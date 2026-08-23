@@ -334,13 +334,7 @@ stops the service at boot rather than surfacing on a live request.</p>
 
 <h3>Deployment shape</h3>
 <ul>
-  <li><strong>Cluster-internal only.</strong> A ClusterIP service on port 8090, no ingress. Callers
-      reach it by in-cluster DNS.</li>
-  <li><strong>Horizontally scaled and stateless.</strong> Two to six replicas behind an HPA; because
-      no request depends on another, any pod can serve any request and scaling needs no coordination.</li>
-  <li><strong>Read-only root filesystem</strong>, workload-identity authentication to the Azure
-      services, no credentials in source or in chart values.</li>
-  <li><strong>EU-region Azure resources only</strong>, reached over private endpoints.</li>
+  <li><strong>Cluster-internal only.</strong> A ClusterIP service on port 8090</li>
   <li><strong>Degrades rather than disappears.</strong> Each cloud engine activates only when its
       endpoint is configured; an unconfigured or unreachable one yields
       <code>engine_unconfigured</code> or <code>engine_error</code> for <em>its</em> file kinds while
@@ -363,16 +357,6 @@ stops the service at boot rather than surfacing on a live request.</p>
       traffic, so a misconfigured deployment fails loudly at boot instead of turning every document
       into a per-file error that only the caller ever sees.</li>
 </ul>
-
-<h3>How it is tested</h3>
-<p>Testing is golden-file driven and runs offline by default. A committed set of binary fixtures —
-a text PDF, a scanned PDF, DOCX, PPTX, HTML, several spreadsheets including deliberate edge cases, a
-photograph, a corrupt file and a file of unknown bytes — is pushed through the service on every
-build. The spreadsheet path is proven end-to-end without any cloud dependency at all, since it makes
-no network call. A separate, environment-gated smoke suite runs the same fixtures against the real
-cloud services to prove OCR and image description. One test exists purely to assert the redaction
-rule: it processes every fixture and checks that no known string from inside any of them appears in
-the captured log output.</p>
 
 </body>
 </html>
