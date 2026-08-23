@@ -512,8 +512,8 @@ Tag `vX.Y.Z` → image + chart to ACR; tag `chart-vX.Y.P` → chart only. Cluste
 **Cut the image tag first when `major.minor` moves.** The chart job resolves `appVersion` by
 searching for an existing image tag matching the chart's `major.minor`
 (`git tag -l "v<major>.<minor>.*"`) and fails the release with *"no image tag … to pair this chart
-with"* when none exists. The chart is at `0.2.0`, so a `chart-v0.2.*` tag cannot publish until
-`v0.2.0` has been cut. Nothing in the repository can be edited to satisfy this — it is a
+with"* when none exists. The chart is at `0.3.0`, so a `chart-v0.3.*` tag cannot publish until
+`v0.3.0` has been cut. Nothing in the repository can be edited to satisfy this — it is a
 tagging-order constraint, and it is invisible until CI runs.
 
 **Don't install chart `0.2.x`+ over a `0.1.x` image.** The chart renders `Foundry__*` variables,
