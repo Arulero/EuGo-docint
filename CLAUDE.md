@@ -179,6 +179,28 @@ Both endpoints share the one resource, on two hostnames:
 
 Golden fixtures are committed binaries; regenerate only deliberately with `dotnet run --project tools/make-golden`, **from the repo root** (the default output path is cwd-relative). See `tools/make-golden/README.md` for the regenerate-to-a-scratch-dir workflow, why a no-op run still rewrites most fixtures, and why a change touching `ImageFixtures.cs` must be verified against the live suite rather than the offline one.
 
+## Output style
+
+Terminal replies are rendered as GitHub-flavoured markdown, so raw ANSI escapes do not colour
+anything — use a syntax-highlighted fence instead (```diff with `+`/`-`/`!` prefixes is the
+general-purpose one).
+
+Use emoji as **status markers by default** in tables and lists, where they compress a status
+column: ✅ pass / done · ❌ fail / broken · ⚠️ caveat or trap · ⏭️ skipped · ❓ unknown or
+unmeasured · 🔍 investigating · 📌 decision · 🚧 scaffolding. 🔴 🟡 🟢 for severity or health
+where a traffic light reads better. Keep them out of prose and headings, which already carry
+structure from the markdown itself.
+
+Two rules that matter more here than the vocabulary does:
+
+- **A marker is a claim about evidence.** ✅ means *measured* — a test that ran green, a `dig`
+  that returned `10.60.5.x`. "Should work" is ❓, and a live suite that self-skipped is ⏭️,
+  never ✅. This repo's whole live-smoke trap history is silence being read as health; a
+  misapplied ✅ is the same bug in the reply.
+- **Repo files follow the repo's convention, not this one.** Nothing above licenses emoji in
+  source, OpenSpec artifacts under `openspec/`, `docs/superpowers/` specs, Helm charts, or
+  commit messages. This section governs replies in the terminal.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
