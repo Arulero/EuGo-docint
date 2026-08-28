@@ -40,6 +40,6 @@
 
 ## 4. Close out
 
-- [ ] 4.1 Run `graphify update .` to keep the knowledge graph current.
-- [ ] 4.2 Merge to `main` once §2.3 and §3.3 both hold, delete the branch, then archive this change
+- [x] 4.1 Run `graphify update .` to keep the knowledge graph current.
+- [x] 4.2 Merge to `main` once §2.3 and §3.3 both hold, delete the branch, then archive this change
       with the OpenSpec archive workflow.
