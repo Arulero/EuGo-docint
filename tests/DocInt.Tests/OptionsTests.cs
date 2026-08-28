@@ -53,6 +53,29 @@ public class OptionsTests
         }
     }
 
+    // Both endpoints are listed in appsettings.json as empty placeholders, so the file names every
+    // key an operator has to supply instead of leaving two of them discoverable only from the
+    // comments around them. Empty is inert: blank and missing fail the boot identically (the theory
+    // below pins that), and appsettings.json is the lowest-precedence provider, so a real value from
+    // user-secrets, the environment or the Helm chart still wins.
+    // Empty is also the ceiling. A committed non-empty endpoint would ship an environment-specific
+    // value as a default, which is precisely what a placeholder must never become.
+    // Foundry:ApiKey deliberately does not join them. StartupConfigurationLog tests the secret
+    // marker on the leaf before it tests for emptiness, so an empty key would put
+    // "Configuration Foundry:ApiKey=***redacted***" in every pod's boot log -- a credential claimed
+    // where none is set, and in-cluster (Workload Identity) none ever is.
+    [Fact]
+    public void Appsettings_lists_both_endpoints_as_empty_placeholders()
+    {
+        var shipped = new ConfigurationBuilder()
+            .AddJsonFile(Path.Combine(AppContext.BaseDirectory, "appsettings.json"))
+            .Build();
+
+        Assert.Equal("", shipped[$"{FoundryOptions.SectionName}:DocumentIntelligenceEndpoint"]);
+        Assert.Equal("", shipped[$"{FoundryOptions.SectionName}:OpenAIEndpoint"]);
+        Assert.Null(shipped[$"{FoundryOptions.SectionName}:ApiKey"]);
+    }
+
     // Every endpoint is required. A blank one used to be a supported deployment mode: the pod came
     // up healthy, passed both probes, and answered engine_unconfigured for every file the missing
     // surface served -- a fault visible only inside a caller's response body and nowhere in the

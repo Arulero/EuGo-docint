@@ -198,23 +198,30 @@ truth, nothing to drift.
       "RetryAfterSeconds": 5
     }
   },
-  // The one Azure AI Foundry account this service talks to. Neither endpoint appears here — they
-  // are environment-specific and never committed, and both are REQUIRED: the host refuses to start
-  // without them rather than answering engine_unconfigured for every file the missing surface
-  // would have served. Supply them via user-secrets or env.
+  // The one Azure AI Foundry account this service talks to. Both endpoints appear below as EMPTY
+  // placeholders: their values are environment-specific and never committed, but the keys are named
+  // here so this file lists everything an operator has to supply. Empty is not a default and not a
+  // supported mode — both are REQUIRED, and a blank one refuses the boot exactly as a missing one
+  // does. Supply the values via user-secrets, environment variables or the Helm chart; each of
+  // those outranks this file, so a placeholder can never mask a real value. Keep them blank: a
+  // committed non-empty endpoint would ship one environment's address as this service's default.
   "Foundry": {
     // Foundry__ApiKey — key1 or key2, and there is no third: a Foundry account has ONE key pair
     // covering every API it exposes, so this single value authenticates both endpoints below.
     // Never committed. Omit it and both surfaces use DefaultAzureCredential.
-    //
-    // Foundry__DocumentIntelligenceEndpoint, https://<resource>.cognitiveservices.azure.com/
+    // Absent rather than an empty placeholder like the endpoints: StartupConfigurationLog matches
+    // the secret marker on a key's leaf before it reports emptiness, so an empty value here would
+    // put "Foundry:ApiKey=***redacted***" in every pod's boot log — a credential reported where
+    // none is set.
+
+    // https://<resource>.cognitiveservices.azure.com/
     // Serves PDF/DOCX/PPTX/HTML via the built-in prebuilt-layout model — no deployment name.
-    //
-    // Foundry__OpenAIEndpoint, https://<resource>.openai.azure.com/ — the resource root only;
+    "DocumentIntelligenceEndpoint": "",
+
+    // https://<resource>.openai.azure.com/ — the resource root only;
     // the SDK appends /openai/deployments/<name>/chat/completions. Serves JPG/PNG.
-    //
-    // Deliberately absent rather than present-and-empty: an empty value reads as a default
-    // someone chose, and both spellings fail the boot identically anyway.
+    "OpenAIEndpoint": "",
+
     // A deployment ALIAS, not a model name — deliberately decoupled from the model behind it
     // (EuGo-infra docs/naming-convention.md, model-<project>-<role>). The model can change on
     // the Foundry side without touching this file; do not "correct" it to the model's name.
@@ -245,9 +252,9 @@ truth, nothing to drift.
 | `DocInt:Admission:BudgetBytes` | `1073741824` (1 GiB) | `docint.admission.budgetBytes` | The per-pod ceiling on bytes held in flight, and the only thing bounding pod memory: peak is roughly baseline + this. Must be ≥ `MaxRequestFileBytes` + 1 MiB (rejected at boot), since a budget under the largest admissible request could never serve it |
 | `DocInt:Admission:QueueTimeoutSeconds` | `10` | `docint.admission.queueTimeoutSeconds` | How long a request waits for budget before being shed. Most bursts drain well inside it and still answer 200 |
 | `DocInt:Admission:RetryAfterSeconds` | `5` | `docint.admission.retryAfterSeconds` | The `Retry-After` value on the 503 sent to a shed request. See [Request-level 400 and 503](#request-level-400-and-503) |
-| `Foundry:ApiKey` | *unset — not in `appsettings.json`* | none, by design | `key1` **or** `key2` from the Foundry account — one key pair covers every API it exposes, so this single value authenticates both endpoints below. Omit it and **both** surfaces use `DefaultAzureCredential`; it is one decision for the account, so they cannot disagree |
-| `Foundry:DocumentIntelligenceEndpoint` | *(none — required)* | `foundry.documentIntelligenceEndpoint` | `https://<resource>.cognitiveservices.azure.com/`. Serves PDF/DOCX/PPTX/HTML through the built-in `prebuilt-layout` model — no deployment name involved. **Required**: blank or missing refuses the boot |
-| `Foundry:OpenAIEndpoint` | *(none — required)* | `foundry.openAIEndpoint` | `https://<resource>.openai.azure.com/` — the resource root only; the SDK appends `/openai/deployments/<name>/chat/completions`. Serves JPG/PNG. **Required**, on the same terms |
+| `Foundry:ApiKey` | *unset — not in `appsettings.json`* | none, by design | `key1` **or** `key2` from the Foundry account — one key pair covers every API it exposes, so this single value authenticates both endpoints below. Omit it and **both** surfaces use `DefaultAzureCredential`; it is one decision for the account, so they cannot disagree. Absent from `appsettings.json` rather than listed empty like the endpoints: the boot log redacts a credential-shaped key before it reports emptiness, so an empty placeholder would report a credential on every pod that has none |
+| `Foundry:DocumentIntelligenceEndpoint` | *listed empty in `appsettings.json`* | `foundry.documentIntelligenceEndpoint` | `https://<resource>.cognitiveservices.azure.com/`. Serves PDF/DOCX/PPTX/HTML through the built-in `prebuilt-layout` model — no deployment name involved. **Required**: blank or missing refuses the boot |
+| `Foundry:OpenAIEndpoint` | *listed empty in `appsettings.json`* | `foundry.openAIEndpoint` | `https://<resource>.openai.azure.com/` — the resource root only; the SDK appends `/openai/deployments/<name>/chat/completions`. Serves JPG/PNG. **Required**, on the same terms |
 | `Foundry:DeploymentNameVision` | `model-eugo-docint-vision` | `foundry.deploymentNameVision` | A deployment **alias**, not a model name — decoupled on purpose (EuGo-infra `docs/naming-convention.md`, `model-<project>-<role>`) so the model behind it can change without touching the service. Don't "correct" it to the model's name |
 | `DocInt:Metrics:Enabled` | `true` | `metrics.enabled` | The Prometheus scrape route. `false` removes it — a `404`, not an empty `200`, so a dashboard cannot read "off" as "no traffic" |
 | `DocInt:Metrics:Path` | `/metrics` | `metrics.path` | Route the exposition is served on; must be rooted, or the pod fails to boot. The chart's scrape annotation reads the same value |
@@ -258,8 +265,19 @@ truth, nothing to drift.
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | unset → SDK default (`grpc`) | `otel.protocol` | Many collectors accept only `http/protobuf`, which is why this is first-class rather than left to `extraEnv` |
 | `OTEL_SERVICE_NAME` | unset → the assembly name `DocInt.Api` | — (chart derives it from the release fullname) | Rendered by the chart **only** when `otel.endpoint` is set. Without it every namespace reports as `DocInt.Api` and two releases cannot be told apart |
 
-`Foundry:ApiKey` is bound by the options class but deliberately absent from the committed
-`appsettings.json` — it exists only in user-secrets or the environment.
+**Both endpoints are listed in the committed `appsettings.json`, with empty values.** The keys are
+named there so the file enumerates everything an operator has to supply; the values stay blank because
+an endpoint is environment-specific and a committed one would ship a single environment's address as
+this service's default. A placeholder is inert: it is outranked by user-secrets, the environment and
+the chart, so it can never mask a supplied value, and left unfilled it refuses the boot exactly as a
+missing key does.
+
+`Foundry:ApiKey` is bound by the options class but stays **absent** from that file rather than joining
+them, and the asymmetry is deliberate: the start-up configuration log matches its secret markers on a
+key's last segment before it tests for emptiness, so an empty placeholder would put
+`Foundry:ApiKey=***redacted***` in every pod's boot log — a credential reported where none is set,
+which under Workload Identity is every in-cluster pod. It exists only in user-secrets or the
+environment.
 
 **One account, one key, two hosts.** The service talks to a single Azure AI Foundry account
 (`kind: AIServices`), which exposes exactly one key pair — `key1`/`key2` are a *rotation* pair, not
