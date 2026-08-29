@@ -103,8 +103,8 @@ jobs:
       # templates cannot render packages with exit 0 and would only fail at `helm install`. Render
       # the packaged artifact (not the working tree) so the exact bytes bound for ACR are proven;
       # same two value sets as ci.yml's chart-lint job, covering the HPA-on and HPA-off branches.
-      # The endpoints are supplied because the chart requires them: a release that omits one fails
-      # to render, which is the behaviour, so a validation render has to provide them.
+      # No endpoint values: the chart renders without them, and supplying them here would test a
+      # configuration no release necessarily has rather than the artifact as it ships.
       # On a v* tag this runs after the image push, so a failure here leaves a published image with
       # no chart; on a chart-v* tag the image job is skipped and nothing has been published yet.
       - name: Validate packaged chart
@@ -113,10 +113,7 @@ jobs:
           TGZ="/tmp/eugo-docint-${{ steps.versions.outputs.chart_version }}.tgz"
           helm lint "$TGZ"
           helm template ci "$TGZ" -f charts/eugo-docint/ci/test-values.yaml > /dev/null
-          helm template ci "$TGZ" \
-            --set foundry.documentIntelligenceEndpoint=https://example-di.cognitiveservices.azure.com/ \
-            --set foundry.openAIEndpoint=https://example-aoai.openai.azure.com/ \
-            --set image.repository=r.example/eugo-docint --set autoscaling.enabled=false > /dev/null
+          helm template ci "$TGZ" --set autoscaling.enabled=false > /dev/null
       - name: Push chart
         run: |
           set -euo pipefail
