@@ -16,6 +16,12 @@ Identity only, no API-key values, no `imagePullSecrets`" — a decision that hel
 kubelet's managed identity authenticates ACR pulls with no secret in the cluster. GHCR offers no
 equivalent. That single fact is what forces a chart change rather than a workflow-only change.
 
+One piece of this has already landed. `chart-agnostic-of-runtime-config` removed the `required`
+gate on `image.repository`, which needed a default to replace it, and the only defensible default
+was this change's coordinate — so `values.yaml` already reads `ghcr.io/eugo-as/eugo-docint`. The
+chart names the registry before anything publishes there. That is a default rather than a promise,
+and it means the work below is the publishing half of a move whose consuming half is done.
+
 ## Goals / Non-Goals
 
 **Goals:**

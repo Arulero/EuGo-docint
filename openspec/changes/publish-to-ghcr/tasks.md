@@ -62,10 +62,15 @@
 
 - [ ] 4.1 Update `charts/eugo-docint/ci/test-values.yaml`: replace
       `creugoexample.azurecr.io/eugo-docint` with a `ghcr.io/eugo-as/eugo-docint` example.
-- [ ] 4.2 Update the `--set image.repository=` examples in `.github/workflows/ci.yml` if any imply
-      a registry, and confirm `chart-lint` still passes every existing assertion — the `/tmp` mount,
-      the endpoint-refusal, and both zero-limit cases — alongside the new ones from groups 1 and 2.
-- [ ] 4.3 Run the gate (restore → build --no-restore → test --no-build against `src/DocInt.slnx`).
+- [ ] 4.2 Confirm `chart-lint` still passes all eleven existing assertions alongside the new ones
+      from groups 1 and 2 — including the two added when the render gate was removed (`rendering
+      with no values supplied…` and `one endpoint set carries only that endpoint`). The
+      endpoint-refusal step this task used to name is gone: it was inverted, not kept.
+- [ ] 4.3 Bump the chart `version` patch in `charts/eugo-docint/Chart.yaml` to `0.3.2` — the rename
+      and the `imagePullSecrets` value are both chart-owned changes, and republishing different
+      chart content under `0.3.1` would make the version meaningless. `major.minor` still tracks the
+      image; leave `appVersion` alone, since CI stamps it at package time.
+- [ ] 4.4 Run the gate (restore → build --no-restore → test --no-build against `src/DocInt.slnx`).
 
 ## 5. Documentation sweep
 
@@ -77,7 +82,9 @@
 - [ ] 5.2 `CLAUDE.md`: update the tech-stack line `Docker → ACR → AKS` and the statement that
       EuGo-infra owns ACR provisioning.
 - [ ] 5.3 `openspec/config.yaml`: update the same `Docker → ACR → AKS` phrase in `context`.
-- [ ] 5.4 `charts/eugo-docint/values.yaml`: update the `image.repository` example comment.
+- [ ] 5.4 `charts/eugo-docint/values.yaml`: confirm `image.repository` already reads
+      `ghcr.io/eugo-as/eugo-docint` — `chart-agnostic-of-runtime-config` set it ahead of this
+      change — so the only edit left in this file is group 2's `imagePullSecrets` block.
 - [ ] 5.5 Confirm nothing under `docs/superpowers/` was modified — those are historical records and
       their ACR rationale is what makes this reversal legible.
 - [ ] 5.6 Repo-wide grep for `azurecr`, `ACR_NAME`, and `acr` outside `docs/superpowers/` and

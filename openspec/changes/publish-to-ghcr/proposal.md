@@ -61,6 +61,11 @@ artifact reaches a cluster.
   `imagePullSecrets` surface.
 - `README.md`, `CLAUDE.md`, `openspec/config.yaml` — all three describe the delivery path as
   ending in ACR.
+- `charts/eugo-docint/values.yaml` already defaults `image.repository` to
+  `ghcr.io/eugo-as/eugo-docint`: `chart-agnostic-of-runtime-config` needed a default in order to
+  drop that value's `required` gate, and took this change's coordinate. So the chart already names
+  the registry it will be published to, and this change makes that name real rather than
+  introducing it.
 - Cluster operators gain one manual step: creating a `docker-registry` secret from a classic
   personal access token with `read:packages`, per namespace.
 - `docs/superpowers/` specs are **not** updated. They record why ACR was chosen, which is the
