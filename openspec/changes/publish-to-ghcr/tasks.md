@@ -93,20 +93,31 @@
 
 ## 6. First release and the verification only a cluster can give
 
-- [ ] 6.1 Push `v0.3.0` and watch the run. Confirm both jobs succeed and neither coordinate carries
+- [x] 6.1 Push `v0.3.0` and watch the run. Confirm both jobs succeed and neither coordinate carries
       a capital letter. Plain `vX.Y.Z`, deliberately not a release candidate: `sort -V` orders a
       prerelease *after* its release, so an `-rc` tag would leave every later chart-only release
       resolving `appVersion` to the candidate. See design.md — Risks.
-- [ ] 6.2 Confirm in GHCR that two distinct packages exist — `eugo-docint` and `eugo-docint-chart` —
+- [x] 6.2 Confirm in GHCR that two distinct packages exist — `eugo-docint` and `eugo-docint-chart` —
       that both are **private**, and that both are linked to this repository.
-- [ ] 6.3 Pull the chart with `helm registry login` + `helm pull oci://ghcr.io/eugo-as/eugo-docint-chart`
-      and confirm its `appVersion` is `0.3.0`.
-- [ ] 6.4 On a real cluster: create the pull secret by hand, `helm install` with
+      Verified 2026-08-29: both published (`:0.3.0` and `:0.3.2`), both refuse an anonymous pull
+      with HTTP 403 — a behavioural check, stronger than the API's visibility field. The
+      `org.opencontainers.image.source` label was applied at build. The repository *link* itself
+      was NOT confirmed: reading it needs `read:packages`, which the available token lacks. Check
+      it in package settings alongside the visibility confirmation.
+- [ ] 6.3 **BLOCKED — needs a classic PAT with `read:packages`.** Pull the chart with
+      `helm registry login` + `helm pull oci://ghcr.io/eugo-as/eugo-docint-chart` and confirm its
+      `appVersion` is `0.3.0`. Attempted 2026-08-29 with the ambient `gh` token: `helm registry
+      login` succeeds and the pull is then refused with `403: denied`, because that token carries
+      `repo`/`workflow` but not `read:packages`. Login succeeding is not access — worth knowing,
+      since it is the same failure an under-scoped pull secret would give a cluster. The
+      credential is deliberately not held in this repo; it is the same PAT 6.4 needs.
+- [ ] 6.4 **BLOCKED — no cluster reachable from this machine** (`kubectl` reports no contexts,
+      `kind` is not installed). On a real cluster: create the pull secret by hand, `helm install` with
       `imagePullSecrets[0].name` set, and confirm the pod reaches `Running`. Rendering proves the
       field is well-formed and nothing more — whether a private image actually pulls cannot be
       established by `helm lint` or `helm template`. If no cluster is available, record this as
       blocked rather than closing it; do not substitute a render for it.
-- [ ] 6.5 Put a BoM XLSX through `/v1/extract` on that pod. The security context and volume mounts
+- [ ] 6.5 **BLOCKED on 6.4.** Put a BoM XLSX through `/v1/extract` on that pod. The security context and volume mounts
       are unchanged by this change, but this is the first pod ever run from a published image, so
       the read-only-root/`/tmp` path has never been exercised on one.
 - [ ] 6.6 Tell EuGo-infra that release execution now needs `helm registry login ghcr.io` and a
