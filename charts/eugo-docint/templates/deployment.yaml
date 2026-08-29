@@ -27,6 +27,15 @@ spec:
         prometheus.io/path: {{ .Values.metrics.path | default "/metrics" | quote }}
       {{- end }}
     spec:
+      {{- /* `with`, so an empty list omits the key rather than rendering `imagePullSecrets: []`.
+             Both are valid to Kubernetes and behave identically, but the empty key invites the
+             reading that a pull secret is configured when none is -- and ci.yml's chart-lint
+             asserts the key's absence, not merely a working render. Names only: the chart never
+             creates a Secret and takes no credential material as a value. */}}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       serviceAccountName: {{ include "eugo-docint.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true

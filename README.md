@@ -421,6 +421,7 @@ Deployment shape — no `appsettings.json` equivalent:
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/eugo-as/eugo-docint` | Override for a different registry or a local image. Always fully qualified — a bare name resolves against Docker Hub |
 | `image.tag` | `""` → `.Chart.AppVersion` | `appVersion` is CI-stamped; override only for local images |
+| `imagePullSecrets` | `[]` | **Names** of secrets that must already exist in the namespace. Empty omits the key entirely. The chart creates no Secret and takes no credential material — see Deploy |
 | `image.pullPolicy` | `IfNotPresent` | `Never` for a locally-loaded image |
 | `serviceAccount.create` / `.name` | `true` / `""` → chart fullname | |
 | `serviceAccount.azureClientId` | `""` | When set, adds the Workload-Identity annotation to the ServiceAccount and the `azure.workload.identity/use` label to pods |
@@ -515,11 +516,40 @@ cluster-internal by design. Probes: liveness `/alive`, readiness `/health`.
 
 ```bash
 helm install docint charts/eugo-docint \
+  --set imagePullSecrets[0].name=ghcr \
   --set serviceAccount.azureClientId=<workload-identity-client-id> \
   --set foundry.documentIntelligenceEndpoint=https://<resource>.cognitiveservices.azure.com/ \
   --set foundry.openAIEndpoint=https://<resource>.openai.azure.com/
 # in-cluster URL: http://docint-eugo-docint.<namespace>.svc:8090/v1/extract
 ```
+
+**The chart is published as `eugo-docint-chart`, and renders `eugo-docint` resources.** `helm push`
+reads the repository from the packaged `Chart.yaml`'s `name:` and cannot be told otherwise, so
+publishing beside the image requires that name — but `.Chart.Name` also feeds
+`app.kubernetes.io/name`, which sits in the Deployment's immutable `spec.selector.matchLabels`.
+The name helpers are therefore pinned to the literal `eugo-docint`; `chart-lint` asserts both
+halves and the helper carries a comment. Only `helm.sh/chart` follows the package name, which is
+right — that label describes the artifact, not the workload.
+
+**Both packages are private, so pulling needs credentials on both sides.** Installing from the OCI
+URL needs `helm registry login ghcr.io` first, and the cluster needs a pull secret — GHCR has no
+equivalent of ACR's kubelet managed identity, which is why the chart now has an `imagePullSecrets`
+value at all. Create it once per namespace, from a **classic** PAT scoped to `read:packages`:
+
+```bash
+kubectl create secret docker-registry ghcr \
+  --docker-server=ghcr.io \
+  --docker-username=<github-user> \
+  --docker-password=<classic-PAT> \
+  -n <namespace>
+```
+
+Classic rather than fine-grained deliberately: fine-grained tokens expire in at most a year, and a
+silent `ImagePullBackOff` months after everyone has forgotten the release is a worse failure than
+the broader scope. Prefer a machine account over a person's token, so revoking it is not tangled
+with anyone's employment. The chart takes secret **names** only — it creates no Secret and accepts
+no credential material as a value, so nothing sensitive reaches a values file or a rendered
+manifest.
 
 **The endpoints are required by the service, not by the chart.** The chart renders with nothing
 supplied at all — it carries each endpoint when set and omits the variable when not — so a release
@@ -531,13 +561,15 @@ install if you want the failure earlier.
 
 Versioning: chart and image share `major.minor`; the chart patch moves independently
 (`chart-v*` tags release chart-only changes). CI stamps `appVersion` — never hand-edit it.
-Tag `vX.Y.Z` → image + chart to ACR; tag `chart-vX.Y.P` → chart only. Cluster provisioning
-(AKS, ACR, identity federation) stays in EuGo-infra.
+Tag `vX.Y.Z` → image + chart to GHCR; tag `chart-vX.Y.P` → chart only. The image publishes to
+`ghcr.io/eugo-as/eugo-docint` and the chart to `ghcr.io/eugo-as/eugo-docint-chart` — separate
+repositories on purpose, since the two share a `major.minor` and would otherwise contend for the
+same tag. Cluster provisioning (AKS, identity federation) and release execution stay in EuGo-infra.
 
 **Cut the image tag first when `major.minor` moves.** The chart job resolves `appVersion` by
 searching for an existing image tag matching the chart's `major.minor`
 (`git tag -l "v<major>.<minor>.*"`) and fails the release with *"no image tag … to pair this chart
-with"* when none exists. The chart is at `0.3.1`, so a `chart-v0.3.*` tag cannot publish until
+with"* when none exists. The chart is at `0.3.2`, so a `chart-v0.3.*` tag cannot publish until
 `v0.3.0` has been cut. Nothing in the repository can be edited to satisfy this — it is a
 tagging-order constraint, and it is invisible until CI runs.
 
@@ -550,13 +582,16 @@ at the pod, not by the caller: that image refuses to start without both endpoint
 at package time, an unpinned install from a working tree whose `appVersion` still reads `0.1.0`
 hits exactly this. Version skew was harmless before this change; it is not any more.
 
-**Release prerequisites** — before a tag push can publish, the GitHub repo needs four
-*variables* (Settings → Secrets and variables → Actions → Variables; not secrets — auth is
-OIDC, no stored credentials): `ACR_NAME` (registry name without `.azurecr.io`),
-`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. The client ID must belong to
-an Entra app/managed identity with a federated credential trusting this repo's GitHub Actions
-OIDC tokens and `AcrPush` on the registry. The ACR itself is provisioned by EuGo-infra —
-until it exists, don't push `v*`/`chart-v*` tags (the release run would just fail).
+**Release prerequisites — there are none.** Publishing authenticates with the built-in
+`GITHUB_TOKEN` and `permissions: packages: write`, so a tag push works in a fresh clone of this
+repository with no variable, no stored secret, and no cloud identity configured first. This
+replaces four repository variables (`ACR_NAME`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`) and a federated Entra credential, which had to exist before a tag could
+publish anything — and which is why no release was ever cut while the ACR was still unprovisioned.
+
+Two things are still manual, and neither blocks a release: confirming both packages are **private**
+in package settings after the first publish (visibility is a setting, not a workflow output), and
+creating the namespace pull secret above.
 
 ## 🧪 Test
 
@@ -567,4 +602,4 @@ dotnet test --no-build src/DocInt.slnx
 ```
 
 Live smoke against real Azure is env-gated — see CLAUDE.md. Container: `docker build -t eugo-docint .`
-(`ci.yml` builds linux/amd64 to prove the Dockerfile; `release.yml` publishes linux/amd64 + linux/arm64). Cluster provisioning (AKS, ACR, identity) lives in the EuGo-infra repo; the deployment chart is in `charts/eugo-docint` (see Deploy).
+(`ci.yml` builds linux/amd64 to prove the Dockerfile; `release.yml` publishes linux/amd64 + linux/arm64). Cluster provisioning (AKS, identity) lives in the EuGo-infra repo; the deployment chart is in `charts/eugo-docint` (see Deploy).

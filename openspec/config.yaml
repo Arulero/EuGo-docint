@@ -20,7 +20,7 @@ context: |
   Stack: .NET 10 · ASP.NET Core minimal API · .NET Aspire (AppHost +
   ServiceDefaults) · Azure.AI.DocumentIntelligence (Layout → Markdown) · OpenXML
   (XLSX typed cells) · Azure OpenAI Foundry utility model (image description) ·
-  OTel + Serilog · Docker → ACR → AKS. The Helm chart lives in this repo under
+  OTel + Serilog · Docker → GHCR → AKS. The Helm chart lives in this repo under
   charts/eugo-docint.
 
   Hard constraints — these bind every change, and a proposal that violates one is

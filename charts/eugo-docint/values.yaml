@@ -6,6 +6,24 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
+# Names of secrets that MUST ALREADY EXIST in the release namespace, used to pull the image. The
+# image is published privately to GHCR, which -- unlike ACR, whose pulls the AKS kubelet's managed
+# identity authenticates with nothing in the cluster -- offers no ambient identity, so a pull needs
+# a credential the namespace holds. This reverses the chart's original "no imagePullSecrets"
+# decision, which held only because ACR made the reference unnecessary.
+#
+# NAMES ONLY. The chart creates no Secret and accepts no credential material as a value: a token
+# routed through values would sit in plaintext in the release manifest, which is the same rule that
+# keeps foundry.apiKey out of this file. Create the secret out of band, per namespace:
+#
+#   kubectl create secret docker-registry ghcr \
+#     --docker-server=ghcr.io --docker-username=<user> --docker-password=<classic-PAT> -n <ns>
+#
+# Empty omits the key from the pod spec entirely -- not an empty list, which renders and applies
+# cleanly while doing nothing. Leaving it empty is supported: a cluster may obtain the image
+# another way (a mirrored registry, a preloaded node).
+imagePullSecrets: []
+
 autoscaling:
   enabled: true
   minReplicas: 2

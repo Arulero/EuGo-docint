@@ -99,6 +99,52 @@ jobs:
           if grep -q 'Foundry__OpenAIEndpoint' one.yaml; then
             echo "::error::the image-description endpoint rendered with no value set"; exit 1
           fi
+      # The chart is PUBLISHED as eugo-docint-chart but must RENDER eugo-docint. `.Chart.Name`
+      # reaches app.kubernetes.io/name, which sits in the Deployment's spec.selector.matchLabels --
+      # an immutable field, so a rename that reached it would make the selector unchangeable at the
+      # packaging name and every upgrade a delete-and-recreate. The helper is pinned to a literal to
+      # stop that; this step is what keeps it pinned. helm.sh/chart is asserted from the other side:
+      # it names the artifact, so it MUST follow the rename -- a helper "fixed" back to .Chart.Name
+      # would leave both labels reading eugo-docint and this step would catch only the first.
+      - name: the published chart name does not reach the rendered resources
+        run: |
+          set -euo pipefail
+          helm template ci charts/eugo-docint > named.yaml
+          grep -q 'app.kubernetes.io/name: eugo-docint$' named.yaml
+          if grep -q 'app.kubernetes.io/name: eugo-docint-chart' named.yaml; then
+            echo "::error::the packaging name reached the immutable selector label"; exit 1
+          fi
+          grep -q 'name: ci-eugo-docint$' named.yaml
+          if grep -q 'name: ci-eugo-docint-chart' named.yaml; then
+            echo "::error::the packaging name reached a rendered resource name"; exit 1
+          fi
+          grep -q 'helm.sh/chart: eugo-docint-chart-' named.yaml
+      # The image is published to a PRIVATE registry, and GHCR has no equivalent of ACR's kubelet
+      # managed-identity pull -- so the pod needs a named secret. Both halves are asserted: set
+      # renders the reference, unset renders no `imagePullSecrets` key at all. The unset half is
+      # the one that matters most: an empty `imagePullSecrets: []` in a pod spec is legal YAML that
+      # renders and applies cleanly, so only the absence of the key proves the guard works.
+      # The third assertion is a standing constraint, not a rendering detail: the chart takes
+      # secret NAMES and never credential material, so nothing resembling a docker config or a
+      # token may appear in a rendered manifest under any values permutation.
+      - name: image pull secrets render by name only, and only when asked for
+        run: |
+          set -euo pipefail
+          helm template ci charts/eugo-docint --set imagePullSecrets[0].name=ghcr > pull-on.yaml
+          grep -q 'imagePullSecrets:' pull-on.yaml
+          grep -A1 'imagePullSecrets:' pull-on.yaml > pull-matched.txt
+          grep -q '\- name: ghcr' pull-matched.txt
+          helm template ci charts/eugo-docint > pull-off.yaml
+          # Explicit `if`, not `! grep` -- see the note in the zero-limits step below.
+          if grep -q 'imagePullSecrets' pull-off.yaml; then
+            echo "::error::an imagePullSecrets key rendered with no secret name configured"; exit 1
+          fi
+          if grep -qE 'dockerconfigjson|\.dockerconfigjson|docker-password|auths"?:' pull-on.yaml; then
+            echo "::error::credential material rendered into a manifest; the chart takes names only"; exit 1
+          fi
+          if grep -q 'kind: Secret' pull-on.yaml; then
+            echo "::error::the chart rendered a Secret; it must never create one"; exit 1
+          fi
       # Regression gate for the read-only-root/XLSX bug: the pod runs with
       # readOnlyRootFilesystem, but OpenXML spills package parts to /tmp, so every XLSX
       # request fails with engine_error unless a writable volume is mounted there. Rendered
