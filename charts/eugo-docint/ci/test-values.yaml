@@ -1,5 +1,5 @@
 image:
-  repository: creugoexample.azurecr.io/eugo-docint
+  repository: ghcr.io/eugo-as/eugo-docint
   tag: 0.1.0
 serviceAccount:
   azureClientId: 00000000-0000-0000-0000-000000000000
