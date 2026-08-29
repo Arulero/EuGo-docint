@@ -104,13 +104,15 @@
       `org.opencontainers.image.source` label was applied at build. The repository *link* itself
       was NOT confirmed: reading it needs `read:packages`, which the available token lacks. Check
       it in package settings alongside the visibility confirmation.
-- [ ] 6.3 **BLOCKED — needs a classic PAT with `read:packages`.** Pull the chart with
-      `helm registry login` + `helm pull oci://ghcr.io/eugo-as/eugo-docint-chart` and confirm its
-      `appVersion` is `0.3.0`. Attempted 2026-08-29 with the ambient `gh` token: `helm registry
-      login` succeeds and the pull is then refused with `403: denied`, because that token carries
-      `repo`/`workflow` but not `read:packages`. Login succeeding is not access — worth knowing,
-      since it is the same failure an under-scoped pull secret would give a cluster. The
-      credential is deliberately not held in this repo; it is the same PAT 6.4 needs.
+- [x] 6.3 Pull the chart with `helm registry login` + `helm pull oci://ghcr.io/eugo-as/eugo-docint-chart`
+      and confirm its `appVersion` is `0.3.0`. Verified 2026-08-29 with a `read:packages` credential:
+      pulled `eugo-docint-chart-0.3.2.tgz`, whose packaged `Chart.yaml` reads `name:
+      eugo-docint-chart`, `version: 0.3.2`, `appVersion: 0.3.0` — so CI stamped the tag's version
+      rather than the tracked `0.1.0`, and the chart is addressable under the packaging name while
+      still rendering `eugo-docint` resources.
+      Earlier attempt with an ambient `repo`/`workflow` token was refused: `helm registry login`
+      SUCCEEDS and the pull is then denied `403`. Login succeeding is not access — the same shape
+      of failure an under-scoped pull secret gives a cluster, and worth recognising in 6.4.
 - [ ] 6.4 **BLOCKED — no cluster reachable from this machine** (`kubectl` reports no contexts,
       `kind` is not installed). On a real cluster: create the pull secret by hand, `helm install` with
       `imagePullSecrets[0].name` set, and confirm the pod reaches `Running`. Rendering proves the
