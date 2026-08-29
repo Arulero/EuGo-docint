@@ -93,12 +93,14 @@
 
 ## 6. First release and the verification only a cluster can give
 
-- [ ] 6.1 Push `v0.3.0-rc.1` and watch the run. Confirm the prerelease suffix passes the
-      major.minor pairing check, both jobs succeed, and neither coordinate carries a capital letter.
+- [ ] 6.1 Push `v0.3.0` and watch the run. Confirm both jobs succeed and neither coordinate carries
+      a capital letter. Plain `vX.Y.Z`, deliberately not a release candidate: `sort -V` orders a
+      prerelease *after* its release, so an `-rc` tag would leave every later chart-only release
+      resolving `appVersion` to the candidate. See design.md — Risks.
 - [ ] 6.2 Confirm in GHCR that two distinct packages exist — `eugo-docint` and `eugo-docint-chart` —
       that both are **private**, and that both are linked to this repository.
 - [ ] 6.3 Pull the chart with `helm registry login` + `helm pull oci://ghcr.io/eugo-as/eugo-docint-chart`
-      and confirm its `appVersion` is `0.3.0-rc.1`.
+      and confirm its `appVersion` is `0.3.0`.
 - [ ] 6.4 On a real cluster: create the pull secret by hand, `helm install` with
       `imagePullSecrets[0].name` set, and confirm the pod reaches `Running`. Rendering proves the
       field is well-formed and nothing more — whether a private image actually pulls cannot be
@@ -107,5 +109,6 @@
 - [ ] 6.5 Put a BoM XLSX through `/v1/extract` on that pod. The security context and volume mounts
       are unchanged by this change, but this is the first pod ever run from a published image, so
       the read-only-root/`/tmp` path has never been exercised on one.
-- [ ] 6.6 Cut `v0.3.0` once 6.1–6.5 are green, and tell EuGo-infra that release execution now needs
-      `helm registry login ghcr.io` and a namespace pull secret.
+- [ ] 6.6 Tell EuGo-infra that release execution now needs `helm registry login ghcr.io` and a
+      namespace pull secret, and that the image and chart moved to GHCR. (This task previously also
+      cut `v0.3.0` after an RC; 6.1 now cuts it directly.)

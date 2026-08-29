@@ -573,6 +573,15 @@ with"* when none exists. The chart is at `0.3.2`, so a `chart-v0.3.*` tag cannot
 `v0.3.0` has been cut. Nothing in the repository can be edited to satisfy this — it is a
 tagging-order constraint, and it is invisible until CI runs.
 
+**Tag `vX.Y.Z` only — no prereleases.** `-rc`/`-beta` suffixes are valid semver and the release
+workflow's `major.minor` pairing check accepts them, but the chart-only path resolves its image
+with `git tag -l "v<major>.<minor>.*" | sort -V | tail -1`, and GNU `sort -V` orders `v0.3.0`
+*before* `v0.3.0-rc.1` — the reverse of semver, where a prerelease precedes its release. So a
+prerelease tag left in history makes every later `chart-v*` release resolve `appVersion` to the
+candidate, and since `image.tag: ""` means `.Chart.AppVersion`, installs from that chart quietly
+pull the prerelease image. Nothing in CI catches it. Fix the resolver first if you ever need a
+release candidate.
+
 **Don't install chart `0.2.x`+ over a `0.1.x` image.** The chart renders `Foundry__*` variables,
 which only the `0.2.x`+ image reads; a `0.1.x` image reads the retired `DocumentIntelligence__*` /
 `AzureOpenAI__*` names and would come up with **no** endpoints configured — every Azure-served kind

@@ -56,7 +56,7 @@ that new value.
 
 So: rename `Chart.yaml`, and change `eugo-docint.name` to return the literal `eugo-docint` instead
 of `.Chart.Name`. The `helm.sh/chart` label continues to read `.Chart.Name`-`.Chart.Version` and
-will read `eugo-docint-chart-0.3.0`, which is correct — that label names the artifact, and the
+will read `eugo-docint-chart-<chart-version>` (`eugo-docint-chart-0.3.2` as shipped), which is correct — that label names the artifact, and the
 artifact genuinely is the chart.
 
 *Alternatives considered.* Pushing to a `charts/` namespace prefix (`ghcr.io/eugo-as/charts/eugo-docint`)
@@ -128,9 +128,25 @@ this repository; without the link, package permissions have to be granted by han
 
 ## Risks / Trade-offs
 
-**Every publish path is unproven; the first tag is the first test.** → Cut `v0.3.0-rc.1` first. The
-version-pairing check derives major.minor by truncation, so a prerelease suffix passes it, and a
-prerelease is excluded from any moving tag. Inspect both packages before cutting `v0.3.0`.
+**Every publish path is unproven; the first tag is the first test.** → Accepted, and cut plain
+`v0.3.0` anyway. An earlier revision of this design prescribed a `v0.3.0-rc.1` dry run; that was
+withdrawn on 2026-08-29 after the resolver was checked rather than assumed.
+
+The pairing check does tolerate a prerelease — it derives major.minor by truncation, so
+`0.3.0-rc.1` yields `0.3` and passes. But the chart-only path resolves its image with
+`git tag -l "v<mm>.*" | sort -V | tail -1`, and GNU `sort -V` orders `v0.3.0` *before*
+`v0.3.0-rc.1` — the reverse of semver, where a prerelease precedes its release. So once both tags
+existed, every later `chart-v0.3.*` release would resolve `appVersion` to the release candidate,
+and since `image.tag: ""` means `.Chart.AppVersion`, an install from that chart would pull the RC
+image with nothing to signal it. The RC passes validation and then corrupts resolution afterwards.
+
+What made the dry run cheap also makes it unnecessary: nothing is deployed and nothing consumes
+docint, so a bad `v0.3.0` costs a `v0.3.1`, while the RC tag would mis-resolve chart-only releases
+for as long as it existed. Tag `vX.Y.Z` only — no prereleases, which is what the README and
+CLAUDE.md already document.
+
+The resolver is left as it is. Hardening it to skip prerelease tags is a real improvement and is
+recorded under *Deliberately deferred*; it is not needed while no prerelease is ever cut.
 
 **A chart-push failure on a `v*` tag leaves a published image with no chart.** → Unchanged from
 today, and accepted: the lowercasing decision above removes the most likely new cause, and the
@@ -182,6 +198,12 @@ before anyone depends on this path.
 - **Keeping an ACR path in parallel for when EuGo-infra's `aks/` stack lands.** Rejected: two
   publish targets doubles the surface that can half-fail, for a registry with no delivery date.
   If ACR arrives, moving back is a smaller change than this one — the workflow shape survives.
+- **Hardening the chart-only image resolver against prerelease tags.** `sort -V | tail -1` picks a
+  prerelease over its own release (see *Risks*), so the "highest existing image version" the spec
+  calls for is wrong the moment a `-rc` tag exists. A filter excluding prereleases would make the
+  scheme enforce itself rather than relying on nobody cutting one. Deferred because the decision
+  taken here is to cut none, which makes the defect unreachable — but it is a latent trap for
+  whoever first tries a release candidate, and the reason it is written down.
 - **Signing or attesting published artifacts** (cosign, provenance, SBOM). Genuinely valuable and
   entirely orthogonal; adding it here would obscure whether a failure came from the registry move
   or the signing step.
