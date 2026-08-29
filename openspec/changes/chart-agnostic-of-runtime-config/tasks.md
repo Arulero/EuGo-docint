@@ -69,6 +69,6 @@
 
 - [x] 6.1 Confirm the full local equivalent of CI is green: `helm lint`, every `chart-lint` step,
       and the three-step .NET gate.
-- [ ] 6.2 Merge to `main` and delete the branch, per the repo workflow.
-- [ ] 6.3 Rebase `feat/publish-to-ghcr` onto the new `main` and confirm its task 4.2 is now
+- [x] 6.2 Merge to `main` and delete the branch, per the repo workflow.
+- [x] 6.3 Rebase `feat/publish-to-ghcr` onto the new `main` and confirm its task 4.2 is now
       verifiable — `chart-lint` green before that change adds anything to it.
