@@ -120,33 +120,67 @@ is itself now required.
 - **THEN** the service starts and image requests are served against that deployment
 - **AND** the value is carried through unchanged, because it names a deployment rather than a model
 
-### Requirement: A release that omits an endpoint fails before it reaches the cluster
+### Requirement: The deployment chart renders independently of runtime configuration
 
-The deployment chart SHALL refuse to render a release that does not supply both endpoints, and the
-refusal SHALL name the value that is missing. Rendering a manifest whose pod is guaranteed to refuse
-to start would move a known configuration error from install time to run time, where it costs a
-failed rollout to discover.
+The deployment chart SHALL render successfully with no configuration value supplied. It SHALL carry
+each endpoint into the rendered pod's environment when that endpoint is set, and SHALL omit the
+corresponding environment variable when it is not. The chart SHALL NOT refuse to render on account
+of a value the service needs at run time.
 
-The chart SHALL NOT carry a default value for either endpoint. A default that renders is
-indistinguishable from a value an operator chose.
+The chart describes how the service is deployed; which endpoints it talks to is runtime wiring. A
+chart that cannot render without that wiring cannot be linted, exercised, or installed by anything
+that supplies those values through another mechanism — and every assertion made by rendering it is
+lost along with it.
 
-#### Scenario: Release omits an endpoint
+The service's own requirement is unaffected: it still refuses to start unless both endpoints are
+configured, and that check remains the enforcement point.
 
-- **WHEN** a release is rendered without one of the two endpoint values
-- **THEN** rendering fails and the message names the missing value
-- **AND** no manifest is produced, so nothing reaches the cluster
+#### Scenario: Render with nothing supplied
 
-#### Scenario: Release supplies both endpoints
+- **WHEN** a release is rendered with no configuration value set
+- **THEN** rendering succeeds and produces a complete manifest
+- **AND** neither endpoint environment variable appears in the rendered pod
+
+#### Scenario: Render with one endpoint supplied
+
+- **WHEN** a release is rendered with only one of the two endpoints set
+- **THEN** rendering succeeds
+- **AND** the rendered pod carries that endpoint's environment variable
+- **AND** it does not carry the other's
+
+#### Scenario: Render with both endpoints supplied
 
 - **WHEN** a release is rendered with both endpoint values set
 - **THEN** rendering succeeds and the rendered pod carries both as environment variables
 
+#### Scenario: A pod rendered without an endpoint still refuses to start
+
+- **WHEN** a pod is started from a manifest rendered without both endpoints
+- **THEN** the service refuses to start and reports the missing endpoint
+- **AND** the misconfiguration is reported by the pod rather than by rendering, because the chart
+  is not the enforcement point
+
 #### Scenario: Deployment concerns independent of configuration still render
 
-- **WHEN** a release is rendered with both endpoint values set and no other value supplied
-- **THEN** rendering succeeds
-- **AND** the rendered pod still mounts a writable temporary directory, because that mount depends
+- **WHEN** a release is rendered with no configuration value set
+- **THEN** the rendered pod still mounts a writable temporary directory, because that mount depends
   on no configuration value
+
+### Requirement: The chart names an image without being told
+
+The chart SHALL carry a default image repository, so that rendering requires no value. A release
+MAY override it, and the resolved value SHALL always be a fully qualified repository rather than a
+bare name that would resolve against an unintended registry.
+
+#### Scenario: No image repository supplied
+
+- **WHEN** a release is rendered with no image repository set
+- **THEN** rendering succeeds and the rendered pod names the default repository
+
+#### Scenario: Image repository overridden
+
+- **WHEN** a release sets an image repository
+- **THEN** the rendered pod names that repository instead of the default
 
 ### Requirement: Retired configuration keys fail the service at boot
 
