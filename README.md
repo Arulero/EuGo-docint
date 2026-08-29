@@ -419,7 +419,7 @@ Deployment shape — no `appsettings.json` equivalent:
 
 | Value | Default | What it does |
 | --- | --- | --- |
-| `image.repository` | — (**required**) | e.g. `<acr>.azurecr.io/eugo-docint` |
+| `image.repository` | `ghcr.io/eugo-as/eugo-docint` | Override for a different registry or a local image. Always fully qualified — a bare name resolves against Docker Hub |
 | `image.tag` | `""` → `.Chart.AppVersion` | `appVersion` is CI-stamped; override only for local images |
 | `image.pullPolicy` | `IfNotPresent` | `Never` for a locally-loaded image |
 | `serviceAccount.create` / `.name` | `true` / `""` → chart fullname | |
@@ -515,12 +515,19 @@ cluster-internal by design. Probes: liveness `/alive`, readiness `/health`.
 
 ```bash
 helm install docint charts/eugo-docint \
-  --set image.repository=<acr>.azurecr.io/eugo-docint \
   --set serviceAccount.azureClientId=<workload-identity-client-id> \
   --set foundry.documentIntelligenceEndpoint=https://<resource>.cognitiveservices.azure.com/ \
   --set foundry.openAIEndpoint=https://<resource>.openai.azure.com/
 # in-cluster URL: http://docint-eugo-docint.<namespace>.svc:8090/v1/extract
 ```
+
+**The endpoints are required by the service, not by the chart.** The chart renders with nothing
+supplied at all — it carries each endpoint when set and omits the variable when not — so a release
+that leaves one out installs cleanly and its pod then refuses to start, naming the missing endpoint.
+The chart deliberately does not check for you: gating the render on runtime wiring made the chart
+impossible to render, lint or test without knowing about Foundry, and it silently disabled five of
+`chart-lint`'s own assertions for as long as it was in place. Assert on your own values before
+install if you want the failure earlier.
 
 Versioning: chart and image share `major.minor`; the chart patch moves independently
 (`chart-v*` tags release chart-only changes). CI stamps `appVersion` — never hand-edit it.
@@ -530,7 +537,7 @@ Tag `vX.Y.Z` → image + chart to ACR; tag `chart-vX.Y.P` → chart only. Cluste
 **Cut the image tag first when `major.minor` moves.** The chart job resolves `appVersion` by
 searching for an existing image tag matching the chart's `major.minor`
 (`git tag -l "v<major>.<minor>.*"`) and fails the release with *"no image tag … to pair this chart
-with"* when none exists. The chart is at `0.3.0`, so a `chart-v0.3.*` tag cannot publish until
+with"* when none exists. The chart is at `0.3.1`, so a `chart-v0.3.*` tag cannot publish until
 `v0.3.0` has been cut. Nothing in the repository can be edited to satisfy this — it is a
 tagging-order constraint, and it is invisible until CI runs.
 

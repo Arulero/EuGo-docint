@@ -1,6 +1,7 @@
 image:
-  # Required at install time, e.g. <acr>.azurecr.io/eugo-docint
-  repository: ""
+  # Fully qualified deliberately: a bare `eugo-docint` resolves against Docker Hub and would pull
+  # something unrelated, which fails later and less clearly than a wrong registry does.
+  repository: ghcr.io/eugo-as/eugo-docint
   # Empty means .Chart.AppVersion
   tag: ""
   pullPolicy: IfNotPresent
@@ -44,9 +45,13 @@ serviceAccount:
 # a key routed through values would sit in plaintext in the release manifest. In-cluster the pod
 # authenticates with Workload Identity -- set serviceAccount.azureClientId and leave keys unset.
 # See the README's "Credentials never go in values.yaml".
-# Both endpoints are REQUIRED and deliberately carry no default here: a release that omits one
-# fails to render, naming the value, rather than producing a pod that refuses to start. A default
-# that renders would be indistinguishable from a value an operator chose.
+#
+# Both endpoints are required by the SERVICE and optional to the CHART. Each renders its env var
+# when set and is omitted when not; a release that omits one still renders and installs, and its
+# pod then refuses to start naming the missing endpoint. The chart deliberately does not gate its
+# render on them -- they are runtime wiring, and requiring them made the chart impossible to
+# render, lint or test without knowing about Foundry. There is still no default for either: a
+# default that rendered would be indistinguishable from a value an operator chose.
 foundry:
   # documentIntelligenceEndpoint -- sets env Foundry__DocumentIntelligenceEndpoint,
   #   e.g. https://<resource>.cognitiveservices.azure.com/. Serves PDF/DOCX/PPTX/HTML.
