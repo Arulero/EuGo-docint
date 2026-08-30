@@ -25,5 +25,6 @@ COPY --from=build /app/publish .
 # curl/wget, so a classic `HEALTHCHECK CMD curl ...` can't run here, and adding
 # one would mean bloating the image with a shell or an HTTP-probe binary --
 # the opposite of what chiseled buys us. Container health is instead provided
-# by Kubernetes liveness/readiness probes against /health (owned by EuGo-infra).
+# by Kubernetes liveness (/live) and readiness (/health) probes, defined in this
+# repo's Helm chart under charts/eugo-docint.
 ENTRYPOINT ["dotnet", "DocInt.Api.dll"]
