@@ -10,11 +10,13 @@ namespace DocInt.Tests;
 /// excludes by path constant, and the scrape route Program.cs adds by wrapping that filter.
 ///
 /// Both halves of the wrap can fail silently: land on the wrong options instance and /metrics gets
-/// traced; replace instead of compose and /alive quietly returns to every trace. And for most of
+/// traced; replace instead of compose and /live quietly returns to every trace. And for most of
 /// this service's life the readiness exclusion matched nothing at all — the constant reads
 /// "/health" while the app mapped "/healthz", and StartsWithSegments compares whole segments, so
 /// every readiness probe was traced, six spans a minute per pod, forever, for a request that says
-/// nothing. Renaming the route closed that; the second theory below is what keeps it closed.
+/// nothing. Renaming the route closed that; the second theory below is what keeps it closed —
+/// including through the later move of liveness from /alive to /live, which had to carry the
+/// constant with it for exactly this reason.
 /// </summary>
 public class TraceFilterTests : IClassFixture<DocIntAppFactory>
 {
@@ -30,7 +32,7 @@ public class TraceFilterTests : IClassFixture<DocIntAppFactory>
 
     [Theory]
     [InlineData("/health", false)]      // readiness — the kubelet's, every 10s
-    [InlineData("/alive", false)]       // liveness — likewise
+    [InlineData("/live", false)]        // liveness — likewise
     [InlineData("/metrics", false)]     // the scrape, on whatever interval a scraper picks
     [InlineData("/v1/extract", true)]   // the traffic whose spans are the point
     [InlineData("/info", true)]
@@ -46,7 +48,7 @@ public class TraceFilterTests : IClassFixture<DocIntAppFactory>
     /// </summary>
     [Theory]
     [InlineData("/health")]
-    [InlineData("/alive")]
+    [InlineData("/live")]
     [InlineData("/metrics")]
     public async Task Every_excluded_path_is_a_route_that_exists(string path)
     {

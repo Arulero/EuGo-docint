@@ -404,7 +404,7 @@ Service and turn a partial outage into a total one, taking the Azure-free XLSX p
 it. PDF and image requests keep returning their per-file `engine_error` inside a 200, which is
 what Contract v1 promises. Only `Unhealthy` maps to 503, and nothing here produces it.
 
-`/alive` is the liveness probe and is deliberately blind to all of this: it evaluates only
+`/live` is the liveness probe and is deliberately blind to all of this: it evaluates only
 checks tagged `live`, and no dependency check carries that tag. A dependency outage must never
 restart a pod that is serving correctly.
 
@@ -512,7 +512,7 @@ their known strings are absent from captured output.
 
 Helm chart in [charts/eugo-docint](charts/eugo-docint) — Deployment, ClusterIP service on 8090,
 Workload-Identity ServiceAccount, HPA (CPU 70 %, min 2 / max 6). No ingress: the service is
-cluster-internal by design. Probes: liveness `/alive`, readiness `/health`.
+cluster-internal by design. Probes: liveness `/live`, readiness `/health`.
 
 ```bash
 helm install docint charts/eugo-docint \

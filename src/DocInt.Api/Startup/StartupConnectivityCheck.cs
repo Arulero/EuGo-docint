@@ -209,7 +209,7 @@ public static class StartupConnectivityCheckExtensions
     }
 
     /// <summary>
-    /// No "live" tag, deliberately: /alive filters on it, and a dependency outage must never
+    /// No "live" tag, deliberately: /live filters on it, and a dependency outage must never
     /// restart a pod that is serving correctly.
     /// </summary>
     private static void AddDependencyCheck(WebApplicationBuilder builder, string service, string endpoint) =>

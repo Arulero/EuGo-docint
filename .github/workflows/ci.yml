@@ -157,6 +157,23 @@ jobs:
       # Rendered to a file rather than `helm template | tee f | grep -q`: grep -q exits on its
       # first match and can SIGPIPE tee mid-write, and volumeMounts renders before volumes,
       # so the emptyDir line is exactly the part that could be lost.
+      # The probe paths are the one place the chart has to agree with the image, and nothing here
+      # can see the image. A manifest probing a path the image does not serve is valid YAML that
+      # renders, lints and applies -- the kubelet then fails liveness on a healthy pod and restarts
+      # it until it backs off. This step pins the chart half so it cannot drift from the served
+      # routes silently; the image half is pinned by TraceFilterTests and HealthEndpointsTests, and
+      # the pair is kept honest by releasing chart and image from one tag. /alive is asserted absent
+      # because the rename to /live has no compatibility window: the old path is not served at all.
+      - name: probes target the paths the image serves
+        run: |
+          set -euo pipefail
+          helm template ci charts/eugo-docint > probes.yaml
+          grep -q 'path: /live' probes.yaml
+          grep -q 'path: /health' probes.yaml
+          # Explicit `if`, not `! grep` -- same reason as the steps below.
+          if grep -q 'path: /alive' probes.yaml; then
+            echo "::error::a probe still targets /alive, which the image no longer serves"; exit 1
+          fi
       - name: rendered pod mounts a writable /tmp
         run: |
           helm template ci charts/eugo-docint > rendered.yaml

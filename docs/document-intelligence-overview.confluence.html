@@ -347,7 +347,7 @@ stops the service at boot rather than surfacing on a live request.</p>
 <ul>
   <li><code>GET /health</code> — readiness, reporting the last known state of each configured
       dependency from a background monitor, so no request ever waits on a cloud round-trip.</li>
-  <li><code>GET /alive</code> — liveness, deliberately blind to dependency state: an upstream outage
+  <li><code>GET /live</code> — liveness, deliberately blind to dependency state: an upstream outage
       must never restart a pod that is serving correctly.</li>
   <li><code>GET /metrics</code> — Prometheus exposition. Counters and histograms cover files, pages
       and bytes processed, per-file duration, duplicate submissions, and rejected or shed requests,
