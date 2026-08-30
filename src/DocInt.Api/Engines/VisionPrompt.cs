@@ -2,7 +2,7 @@ namespace DocInt.Api.Engines;
 
 /// <summary>
 /// The factual-observations-only guardrail (Decision 12 open item 3). Docint states what
-/// images SHOW, never what the product IS — classification lives upstream in EuGo-Web.
+/// images SHOW, never what the product IS — classification lives upstream in the caller.
 /// Changing this wording is a spec change: update the snapshot test AND the design doc.
 /// </summary>
 public static class VisionPrompt

@@ -223,7 +223,7 @@ truth, nothing to drift.
     "OpenAIEndpoint": "",
 
     // A deployment ALIAS, not a model name — deliberately decoupled from the model behind it
-    // (EuGo-infra docs/naming-convention.md, model-<project>-<role>). The model can change on
+    // (the cluster's naming convention, model-<project>-<role>). The model can change on
     // the Foundry side without touching this file; do not "correct" it to the model's name.
     "DeploymentNameVision": "model-eugo-docint-vision"
   },
@@ -255,7 +255,7 @@ truth, nothing to drift.
 | `Foundry:ApiKey` | *unset — not in `appsettings.json`* | none, by design | `key1` **or** `key2` from the Foundry account — one key pair covers every API it exposes, so this single value authenticates both endpoints below. Omit it and **both** surfaces use `DefaultAzureCredential`; it is one decision for the account, so they cannot disagree. Absent from `appsettings.json` rather than listed empty like the endpoints: the boot log redacts a credential-shaped key before it reports emptiness, so an empty placeholder would report a credential on every pod that has none |
 | `Foundry:DocumentIntelligenceEndpoint` | *listed empty in `appsettings.json`* | `foundry.documentIntelligenceEndpoint` | `https://<resource>.cognitiveservices.azure.com/`. Serves PDF/DOCX/PPTX/HTML through the built-in `prebuilt-layout` model — no deployment name involved. **Required**: blank or missing refuses the boot |
 | `Foundry:OpenAIEndpoint` | *listed empty in `appsettings.json`* | `foundry.openAIEndpoint` | `https://<resource>.openai.azure.com/` — the resource root only; the SDK appends `/openai/deployments/<name>/chat/completions`. Serves JPG/PNG. **Required**, on the same terms |
-| `Foundry:DeploymentNameVision` | `model-eugo-docint-vision` | `foundry.deploymentNameVision` | A deployment **alias**, not a model name — decoupled on purpose (EuGo-infra `docs/naming-convention.md`, `model-<project>-<role>`) so the model behind it can change without touching the service. Don't "correct" it to the model's name |
+| `Foundry:DeploymentNameVision` | `model-eugo-docint-vision` | `foundry.deploymentNameVision` | A deployment **alias**, not a model name — decoupled on purpose (the cluster's naming convention, `model-<project>-<role>`) so the model behind it can change without touching the service. Don't "correct" it to the model's name |
 | `DocInt:Metrics:Enabled` | `true` | `metrics.enabled` | The Prometheus scrape route. `false` removes it — a `404`, not an empty `200`, so a dashboard cannot read "off" as "no traffic" |
 | `DocInt:Metrics:Path` | `/metrics` | `metrics.path` | Route the exposition is served on; must be rooted, or the pod fails to boot. The chart's scrape annotation reads the same value |
 | `Serilog:MinimumLevel:Default` | `Information` (`Microsoft` and `System` at `Error`) | `extraEnv` | Log verbosity. Document *content* is never logged at any level |
@@ -482,7 +482,8 @@ excludes itself from that instrument and from tracing, so it costs no series and
 
 **The scrape route.** `GET /metrics` serves the Prometheus text exposition, on by default
 (`DocInt:Metrics:Enabled`, path `DocInt:Metrics:Path`). It exists because the OTLP path needs a
-collector EuGo-infra does not run yet, so until it does this is the only way to read the counters:
+collector that nothing in the cluster runs yet, so until one exists this is the only way to read
+the counters:
 
 ```bash
 kubectl port-forward svc/eugo-docint 8090:8090
@@ -505,8 +506,8 @@ never logged at any level, and a test asserts it by processing the golden fixtur
 their known strings are absent from captured output.
 
 > **No collector ships with this repo.** `otel.endpoint` is the hook; standing up an OTLP collector
-> is EuGo-infra's side of the work. Until then these are visible in the Aspire dashboard locally
-> and in the test suite, and nowhere in the cluster.
+> is the cluster operator's side of the work, outside this repo. Until then these are visible in the
+> Aspire dashboard locally and in the test suite, and nowhere in the cluster.
 
 ## 🚢 Deploy
 
@@ -564,7 +565,8 @@ Versioning: chart and image share `major.minor`; the chart patch moves independe
 Tag `vX.Y.Z` → image + chart to GHCR; tag `chart-vX.Y.P` → chart only. The image publishes to
 `ghcr.io/eugo-as/eugo-docint` and the chart to `ghcr.io/eugo-as/eugo-docint-chart` — separate
 repositories on purpose, since the two share a `major.minor` and would otherwise contend for the
-same tag. Cluster provisioning (AKS, identity federation) and release execution stay in EuGo-infra.
+same tag. Cluster provisioning (AKS, identity federation) and release execution live outside this
+repo.
 
 **Cut the image tag first when `major.minor` moves.** The chart job resolves `appVersion` by
 searching for an existing image tag matching the chart's `major.minor`
@@ -611,4 +613,4 @@ dotnet test --no-build src/DocInt.slnx
 ```
 
 Live smoke against real Azure is env-gated — see CLAUDE.md. Container: `docker build -t eugo-docint .`
-(`ci.yml` builds linux/amd64 to prove the Dockerfile; `release.yml` publishes linux/amd64 + linux/arm64). Cluster provisioning (AKS, identity) lives in the EuGo-infra repo; the deployment chart is in `charts/eugo-docint` (see Deploy).
+(`ci.yml` builds linux/amd64 to prove the Dockerfile; `release.yml` publishes linux/amd64 + linux/arm64). Cluster provisioning (AKS, identity) lives outside this repo; the deployment chart is in `charts/eugo-docint` (see Deploy).
