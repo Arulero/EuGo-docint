@@ -122,11 +122,11 @@ metrics:
   # annotation below follows automatically -- they read the same value.
   path: ""
   # Pod annotations for scrapers that discover targets the prometheus.io/* way. OFF by default and
-  # currently inert either way: EuGo-infra runs no Prometheus and no collector, so nothing reads
-  # them. Until it does, reach the route with `kubectl port-forward svc/<release> 8090:8090` and
-  # curl it. Confirm the keys against whatever scraper infra actually stands up before turning
-  # this on -- Azure Monitor managed Prometheus takes its scrape config from its own ConfigMap and
-  # does not honour these by default.
+  # currently inert either way: no Prometheus and no collector are deployed alongside this service
+  # today, so nothing reads them. Until one is, reach the route with `kubectl port-forward
+  # svc/<release> 8090:8090` and curl it. Confirm the keys against whatever scraper infra actually
+  # stands up before turning this on -- Azure Monitor managed Prometheus takes its scrape config
+  # from its own ConfigMap and does not honour these by default.
   scrapeAnnotations: false
 
 # Telemetry export. Empty endpoint omits all three vars below, which is the shipped behaviour:

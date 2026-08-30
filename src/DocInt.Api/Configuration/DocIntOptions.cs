@@ -191,8 +191,8 @@ public sealed class AdmissionOptions
 /// <remarks>
 /// A second metric reader beside the OTLP exporter, not a replacement for it: OTLP stays the
 /// production path (the exporter behind this route is a prerelease package, and upstream says so),
-/// and this exists because the OTLP path needs a collector that EuGo-infra does not yet run — a
-/// scrape is the only way to read the counters today. Nothing here can leak document content: the
+/// and this exists because the OTLP path needs a collector that nothing in the cluster runs yet —
+/// a scrape is the only way to read the counters today. Nothing here can leak document content: the
 /// instruments carry the same low-cardinality tags they always did, never a filename or a hash.
 /// </remarks>
 public sealed class MetricsOptions
