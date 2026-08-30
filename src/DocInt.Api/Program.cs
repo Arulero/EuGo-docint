@@ -99,15 +99,19 @@ try
     }
 
     // Two separate options objects, deliberately. /health is readiness and carries the
-    // dependency report; /alive is liveness and must stay a plain-text, local-only answer —
+    // dependency report; /live is liveness and must stay a plain-text, local-only answer —
     // sharing one object here would silently change the liveness body.
+    //
+    // /live, not Aspire's stock /alive: the health check it selects is tagged "live" and the
+    // predicate below reads that tag, so the route now spells the concept the same way the code
+    // does. The rename had to carry AlivenessEndpointPath with it — see the next paragraph.
     //
     // The paths match ServiceDefaults' HealthEndpointPath/AlivenessEndpointPath on purpose: those
     // constants also drive its tracing filter, and while this route was /healthz the filter
     // matched nothing and traced every readiness probe. That makes NOT calling
     // app.MapDefaultEndpoints() load-bearing in a way it was not before — it maps these same two
     // paths in Development, so restoring the call would now double-register both and throw
-    // AmbiguousMatchException at request time instead of only colliding on /alive.
+    // AmbiguousMatchException at request time instead of only colliding on liveness.
     app.MapHealthChecks("/health", new HealthCheckOptions
     {
         ResponseWriter = HealthResponseWriter.WriteAsync,
@@ -121,7 +125,7 @@ try
             [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable,
         },
     });
-    app.MapHealthChecks("/alive", new HealthCheckOptions
+    app.MapHealthChecks("/live", new HealthCheckOptions
     {
         Predicate = r => r.Tags.Contains("live")
     });
@@ -139,7 +143,7 @@ try
         .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
         .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
         .FirstOrDefault()?.InformationalVersion ?? "unknown";
-    string[] endpoints = ["/", "/v1/extract", "/health", "/alive", "/info",
+    string[] endpoints = ["/", "/v1/extract", "/health", "/live", "/info",
         .. metrics.Enabled ? new[] { metrics.Path } : []];
     app.MapGet("/info", () => Results.Json(new
     {

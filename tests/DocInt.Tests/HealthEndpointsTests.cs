@@ -31,11 +31,21 @@ public class HealthEndpointsTests : IClassFixture<DocIntAppFactory>
     }
 
     [Fact]
-    public async Task Alive_returns_healthy()
+    public async Task Live_returns_healthy()
     {
-        var response = await _client.GetAsync("/alive");
+        var response = await _client.GetAsync("/live");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+    }
+
+    // The rename is only half done if the old path still answers: a chart left probing /alive
+    // would keep passing against a new image, and the mismatch this release accepts would go
+    // unnoticed until the one deployment that did update its chart.
+    [Fact]
+    public async Task Alive_is_no_longer_served()
+    {
+        var response = await _client.GetAsync("/alive");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -57,7 +67,8 @@ public class HealthEndpointsTests : IClassFixture<DocIntAppFactory>
         Assert.False(string.IsNullOrWhiteSpace(doc.RootElement.GetProperty("version").GetString()));
         var endpoints = doc.RootElement.GetProperty("endpoints").EnumerateArray().Select(e => e.GetString()).ToArray();
         Assert.Contains("/health", endpoints);
-        Assert.Contains("/alive", endpoints);
+        Assert.Contains("/live", endpoints);
+        Assert.DoesNotContain("/alive", endpoints);
         Assert.Contains("/info", endpoints);
     }
 }
@@ -153,13 +164,13 @@ public class DegradedDependencyTests
     // Liveness must not move: restarting a pod that is serving correctly fixes nothing and
     // costs a rolling outage. Guards both the missing "live" tag and the separate options object.
     [Fact]
-    public async Task Alive_is_unaffected_by_a_degraded_dependency()
+    public async Task Live_is_unaffected_by_a_degraded_dependency()
     {
         using var factory = new DegradedFactory();
         var client = factory.CreateClient();
         (await DegradedBody(client)).Dispose();
 
-        var response = await client.GetAsync("/alive");
+        var response = await client.GetAsync("/live");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());

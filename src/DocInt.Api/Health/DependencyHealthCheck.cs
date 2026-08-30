@@ -10,7 +10,7 @@ namespace DocInt.Api.Health;
 /// A failure is <see cref="HealthStatus.Degraded"/>, never Unhealthy, and the endpoint maps
 /// Degraded to 200: the dependency is shared by every replica, so failing readiness would
 /// empty the Service rather than shed load, and would take the Azure-free XLSX path down with
-/// it. Registered without the "live" tag, so /alive never evaluates it.
+/// it. Registered without the "live" tag, so /live never evaluates it.
 /// </remarks>
 public sealed class DependencyHealthCheck(string service, string endpoint, DependencyHealthSnapshot snapshot)
     : IHealthCheck
