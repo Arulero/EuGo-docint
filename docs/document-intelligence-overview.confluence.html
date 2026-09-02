@@ -138,7 +138,7 @@ it never fails the call.</p>
   <tbody>
     <tr><td>Per file</td><td>200 with <code>error</code></td>
         <td>The file is corrupt, empty, of an unsupported type, over the size cap, timed out, or its
-            engine failed or is not configured.</td></tr>
+            engine failed.</td></tr>
     <tr><td>Request</td><td>400 <code>problem+json</code></td>
         <td>The <em>request</em> is malformed: not multipart, no <code>files</code> parts, too many
             files, file parts totalling over the request cap, oversized <code>hints</code>.</td></tr>
@@ -150,7 +150,10 @@ it never fails the call.</p>
 
 <p>Per-file error codes: <code>unsupported_type</code> · <code>too_large</code> ·
 <code>empty_file</code> · <code>corrupt</code> · <code>timeout</code> · <code>engine_error</code> ·
-<code>engine_unconfigured</code>.</p>
+<code>engine_unconfigured</code>. The last of these stays in the frozen vocabulary but no
+running instance emits it: both cloud endpoints are required configuration, so a surface the service
+could not serve stops it at boot rather than surfacing per file (see <em>Deployment
+shape</em> under section 4).</p>
 
 <p>Alongside errors, each file carries a <code>warnings</code> array for anything worth knowing that
 did not stop the extraction — a declared content type that disagreed with the actual bytes, a
@@ -335,12 +338,15 @@ stops the service at boot rather than surfacing on a live request.</p>
 <h3>Deployment shape</h3>
 <ul>
   <li><strong>Cluster-internal only.</strong> A ClusterIP service on port 8090</li>
-  <li><strong>Degrades rather than disappears.</strong> Each cloud engine activates only when its
-      endpoint is configured; an unconfigured or unreachable one yields
-      <code>engine_unconfigured</code> or <code>engine_error</code> for <em>its</em> file kinds while
-      every other kind — notably the entirely local spreadsheet path — keeps working normally. A
-      degraded dependency deliberately does not fail readiness: all replicas share the same upstream
-      resources, so removing pods from the service would turn a partial outage into a total one.</li>
+  <li><strong>Degrades rather than disappears.</strong> An unreachable cloud engine yields
+      <code>engine_error</code> for <em>its</em> file kinds while every other kind — notably the
+      entirely local spreadsheet path — keeps working normally. A degraded dependency deliberately
+      does not fail readiness: all replicas share the same upstream resources, so removing pods from
+      the service would turn a partial outage into a total one.</li>
+  <li><strong>But it does not start half-configured.</strong> Both cloud endpoints are required
+      configuration, so a missing one is a boot failure rather than a per-file error. The
+      alternative was a pod that started, passed both probes, and failed every file of the kinds it
+      could not serve — visible only inside a caller's response body.</li>
 </ul>
 
 <h3>Health and observability</h3>
@@ -357,6 +363,298 @@ stops the service at boot rather than surfacing on a live request.</p>
       traffic, so a misconfigured deployment fails loudly at boot instead of turning every document
       into a per-file error that only the caller ever sees.</li>
 </ul>
+
+<h2>5. Infrastructure requirements</h2>
+
+<p>The service is stateless, so what it needs from the platform is short: an Azure AI Foundry
+account exposing two model surfaces, an identity allowed to call them, and a Kubernetes namespace
+to run in. Everything listed here is provisioned outside the service — it consumes these, it
+creates none of them.</p>
+
+<h3>Models</h3>
+<p>Two models are required, and they are of different kinds. One is a built-in model addressed by
+name in the request; the other is a deployment that has to exist on the account before the service
+will serve a single image.</p>
+
+<table>
+  <thead><tr><th>Surface</th><th>What is required</th><th>Provisioning</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Document Intelligence</strong><br>PDF · DOCX · PPTX · HTML</td>
+        <td>The built-in <code>prebuilt-layout</code> model, at API version
+            <code>2024-11-30</code> — the version pinned by the SDK the service is built against.
+            OCR for scanned documents is part of that same model.</td>
+        <td>None. A prebuilt model is a property of the service in a region, not something deployed
+            into an account: it is named in the request body, has no deployment name, and there is
+            no capacity to size. What must be true is that the region offers it.</td></tr>
+    <tr><td><strong>Vision</strong><br>JPG · PNG</td>
+        <td>A vision-capable chat model that accepts image content parts on the chat-completions
+            API. The service knows it only as a deployment alias —
+            <code>Foundry:DeploymentNameVision</code>, shipped as
+            <code>model-eugo-docint-vision</code>.</td>
+        <td>A deployment must exist on the account under exactly that alias, with enough quota for
+            the expected image volume. The service sends one completion per image.</td></tr>
+  </tbody>
+</table>
+
+<p>The alias is deliberately decoupled from the model behind it: replacing or upgrading the vision
+model is an operation on the Foundry account alone — no image rebuild, no configuration change, no
+redeploy. The corollary is that no document can tell you which model is answering; the deployment
+is the source of truth.</p>
+
+<p><strong>The region gate.</strong> When one account serves both surfaces, both capabilities must
+be available in the <em>same</em> EU region — layout availability and vision-model availability
+each vary by region, and one account cannot straddle two. Two standalone resources remain a
+supported layout: the service reads two independent endpoint values and does not care whether they
+belong to the same account. One account is simply less to provision, secure and monitor.</p>
+
+<h3>The account</h3>
+<ul>
+  <li><strong>One account, two hostnames.</strong> A Foundry account publishes each API on its own
+      FQDN — <code>https://&lt;resource&gt;.cognitiveservices.azure.com/</code> for Document
+      Intelligence, <code>https://&lt;resource&gt;.openai.azure.com/</code> for the vision
+      deployment. Neither is derivable from the other once custom subdomains, sovereign suffixes or
+      private-endpoint DNS are in play, which is why configuration carries both as separate
+      values.</li>
+  <li><strong>A custom subdomain is mandatory, not optional.</strong> Entra ID authentication cannot
+      use regional endpoints, and key-less operation is the intended production path.</li>
+  <li><strong>An EU region</strong>, for every resource the service talks to.</li>
+</ul>
+
+<h3>Identity and access</h3>
+<ul>
+  <li><strong>Workload Identity — the production path.</strong> A federated identity for the pod's
+      service account, plus a data-plane role on the account (<code>Cognitive Services User</code>
+      or equivalent). The role has to cover <em>both</em> data planes: granting it on only one
+      surfaces as a 403 on every file of the other kind, at runtime rather than at deploy time.</li>
+  <li><strong>Or the account key.</strong> An account exposes one key pair — <code>key1</code> and
+      <code>key2</code> are a rotation pair, not one key per API — so a single value authenticates
+      both surfaces. It reaches the pod as configuration; the Helm chart accepts no credential
+      material and creates no secret.</li>
+  <li><strong>The choice is one decision for the account.</strong> With no key configured, both
+      surfaces use the ambient managed identity, so they cannot end up on different authentication
+      legs against the same resource.</li>
+</ul>
+
+<h3>Network</h3>
+<ul>
+  <li><strong>Outbound only, and only to the account.</strong> The service opens no other
+      connection; it has no ingress, no certificate and no public DNS record of its own.</li>
+  <li><strong>A private endpoint, where public access to the account is disabled.</strong> The
+      cluster's VNet must be linked to the account's private DNS zones, and the endpoint must carry
+      a record for every FQDN in use — the two hostnames this service reads sit on different
+      suffixes, so a zone group covering one of them is not enough. A missing link is not a partial
+      failure: neither cloud surface resolves, and the pod refuses to start.</li>
+</ul>
+
+<h3>Cluster</h3>
+<ul>
+  <li><strong>A namespace on AKS</strong>, a ClusterIP service on port 8090, and no ingress
+      resource. Callers reach it by cluster-internal service name.</li>
+  <li><strong>Two replicas, autoscaled.</strong> An HPA on CPU and memory takes it to six. Replicas
+      are interchangeable — there is no session state and no leader.</li>
+  <li><strong>A memory limit sized to the admission budget.</strong> Peak usage is roughly baseline
+      plus the pod's in-flight byte budget, because every accepted file is held whole in memory for
+      the duration of its request. The shipped chart requests 512 MiB and limits 2 GiB against a
+      1 GiB budget. Raising the budget or the per-file cap without raising the limit is how the pod
+      gets OOM-killed.</li>
+  <li><strong>A writable <code>/tmp</code> — load-bearing, not cosmetic.</strong> The container runs
+      with a read-only root filesystem, and the spreadsheet path spills package parts to
+      <code>/tmp</code> even though it reads the workbook from memory. Without that mount
+      <em>every</em> XLSX request fails. Nothing short of a real pod catches it: the container build
+      and the offline test suite both run on a writable filesystem, so the read-only root exists
+      only once the chart is applied.</li>
+  <li><strong>An image pull secret</strong>, since the image is published to a private registry.</li>
+</ul>
+
+<h3>What it does not require</h3>
+<p>Worth stating explicitly, because it is most of what an operator would otherwise plan for. There
+is <strong>no database, no blob container, no cache and no message broker</strong> — nothing to back
+up, nothing to migrate, nothing to restore. The only state a replica holds is the requests currently
+in flight, so scaling is adding pods and recovery is restarting them. A telemetry collector is
+optional: without one, counters are still readable from the scrape route, while traces and logs stay
+inside the pod. And there is no ingress, no TLS certificate and no public DNS record, because the
+service is not reachable from outside the cluster by design.</p>
+
+<h2>6. Configuration options</h2>
+
+<p>Every setting ships with a default in the image, except the two endpoints, which are
+environment-specific and therefore required from the operator. Configuration arrives in three
+layers, each overriding the one before it: the image's <code>appsettings.json</code>, then
+environment variables (a colon in a key becomes a double underscore — <code>DocInt:MaxFileBytes</code>
+is <code>DocInt__MaxFileBytes</code>), then, for a Kubernetes release, the Helm values that render
+those variables. A Helm value left empty renders no variable at all and leaves the image's default
+in force; the chart deliberately does not restate the defaults, so there is nothing for them to
+drift against.</p>
+
+<blockquote>
+<p><strong>All of it is validated at start-up.</strong> A missing, non-positive or mutually
+inconsistent value stops the pod at boot with a message naming the key — never on a live request,
+and never as a per-file error that only the caller ever sees.</p>
+</blockquote>
+
+<h3>Connection to the Foundry account</h3>
+<table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>Foundry:DocumentIntelligenceEndpoint</code></td><td><em>required</em></td>
+        <td><code>https://&lt;resource&gt;.cognitiveservices.azure.com/</code>. Serves PDF, DOCX,
+            PPTX and HTML through <code>prebuilt-layout</code> — no deployment name is
+            involved.</td></tr>
+    <tr><td><code>Foundry:OpenAIEndpoint</code></td><td><em>required</em></td>
+        <td><code>https://&lt;resource&gt;.openai.azure.com/</code>, the resource root only; the
+            SDK appends the deployment path. Serves JPG and PNG.</td></tr>
+    <tr><td><code>Foundry:DeploymentNameVision</code></td><td><code>model-eugo-docint-vision</code></td>
+        <td>A deployment <strong>alias</strong>, not a model name. Point it at whatever the account
+            calls its vision deployment; do not "correct" it to the model's name.</td></tr>
+    <tr><td><code>Foundry:ApiKey</code></td><td><em>unset</em></td>
+        <td><code>key1</code> or <code>key2</code> from the account, authenticating both endpoints.
+            Omitted, both surfaces use the ambient managed identity. Never committed, and the chart
+            offers no value for it.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Why the endpoints are required rather than optional.</strong> A blank endpoint used to be
+a supported mode, and the pod it produced looked healthy: it started, passed both probes, and
+answered a per-file error for every file of the kinds that endpoint served — a fault visible only
+inside a caller's response body and nowhere in the deployment. Requiring the values moves that
+failure to the boot, where it is loud. Supplying a value and dialling it stay separate decisions,
+though: a host that genuinely cannot reach the account still supplies the hostnames — they are
+addresses, not credentials — and turns off the start-up check below.</p>
+
+<h3>Request limits</h3>
+<p>What each limit does, and what exceeding it produces, is in <em>Limits and their defaults</em>
+under section 4; this is the same set by key name.</p>
+<table>
+  <thead><tr><th>Setting</th><th>Helm value</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>DocInt:MaxFileBytes</code></td><td><code>docint.maxFileBytes</code></td><td>52428800 (50 MiB)</td></tr>
+    <tr><td><code>DocInt:MaxFilesPerRequest</code></td><td><code>docint.maxFilesPerRequest</code></td><td>32</td></tr>
+    <tr><td><code>DocInt:MaxRequestFileBytes</code></td><td><code>docint.maxRequestFileBytes</code></td><td>209715200 (200 MiB)</td></tr>
+    <tr><td><code>DocInt:PerFileTimeoutSeconds</code></td><td><code>docint.perFileTimeoutSeconds</code></td><td>100</td></tr>
+    <tr><td><code>DocInt:MaxParallelism</code></td><td><code>docint.maxParallelism</code></td><td>4</td></tr>
+    <tr><td><code>DocInt:Admission:Enabled</code></td><td><code>docint.admission.enabled</code></td><td><code>true</code></td></tr>
+    <tr><td><code>DocInt:Admission:BudgetBytes</code></td><td><code>docint.admission.budgetBytes</code></td><td>1073741824 (1 GiB)</td></tr>
+    <tr><td><code>DocInt:Admission:QueueTimeoutSeconds</code></td><td><code>docint.admission.queueTimeoutSeconds</code></td><td>10</td></tr>
+    <tr><td><code>DocInt:Admission:RetryAfterSeconds</code></td><td><code>docint.admission.retryAfterSeconds</code></td><td>5</td></tr>
+  </tbody>
+</table>
+<p>Two of these reach further than their own check. <code>MaxRequestFileBytes</code> also sets what
+the web server itself will accept (that value plus a megabyte of multipart framing), so lowering it
+lowers the pod's worst-case buffered payload. <code>Admission:BudgetBytes</code> is the only thing
+bounding pod memory, which is what makes memory a meaningful signal to autoscale on. Turning
+admission off admits every request immediately; the request-level limits above still apply.</p>
+
+<h3>Reachability checks</h3>
+<table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>DocInt:StartupProbe:Enabled</code></td><td><code>true</code></td>
+        <td>Dial both endpoints once at boot and refuse to start if one stays unreachable. Turn it
+            off where the account is legitimately unreachable from the host — a developer machine
+            outside the VNet. It skips the dialling and nothing else; the endpoints are still
+            required.</td></tr>
+    <tr><td><code>DocInt:StartupProbe:Attempts</code></td><td>3</td>
+        <td>Attempts per endpoint, counting the first. Only a transport failure or a retryable
+            status is retried.</td></tr>
+    <tr><td><code>DocInt:StartupProbe:RetryDelaySeconds</code></td><td>2</td>
+        <td>Base backoff between attempts; exponential with jitter.</td></tr>
+    <tr><td><code>DocInt:StartupProbe:AttemptTimeoutSeconds</code></td><td>4</td>
+        <td>Ceiling on one attempt, so a hung handshake cannot starve the rest. It must cover a cold
+            token round-trip, not just the call.</td></tr>
+    <tr><td><code>DocInt:StartupProbe:TotalTimeoutSeconds</code></td><td>25</td>
+        <td>Ceiling on the whole check. Keep it inside the pod's start-up probe window, or the
+            container is restarted mid-check.</td></tr>
+    <tr><td><code>DocInt:DependencyCheck:Enabled</code></td><td><code>true</code></td>
+        <td>Re-dial both endpoints periodically and report the result on <code>/health</code>. Off,
+            the endpoint reports only the service itself.</td></tr>
+    <tr><td><code>DocInt:DependencyCheck:IntervalSeconds</code></td><td>30</td>
+        <td>Seconds between rounds. Each round costs one lightweight call per dependency per pod,
+            against the same quota real traffic uses.</td></tr>
+    <tr><td><code>DocInt:DependencyCheck:TimeoutSeconds</code></td><td>4</td>
+        <td>Ceiling on one probe.</td></tr>
+  </tbody>
+</table>
+<p>The two checks are deliberately independent — one is boot-time and fatal, the other periodic and
+informational — so a host outside the network turns off both, explicitly. Neither has a first-class
+Helm value; set them as extra environment variables on the release.</p>
+
+<h3>Telemetry and logging</h3>
+<table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>DocInt:Metrics:Enabled</code> · <code>:Path</code></td>
+        <td><code>true</code> · <code>/metrics</code></td>
+        <td>The Prometheus scrape route. Disabling it removes the route — a 404, not an empty 200,
+            so a dashboard cannot read "off" as "no traffic". The path must be rooted, or the pod
+            does not start.</td></tr>
+    <tr><td><code>DocInt:DuplicateTracking:Enabled</code> · <code>:Capacity</code></td>
+        <td><code>true</code> · 100000</td>
+        <td>Counts repeated submissions per pod. The cache holds 64-bit content hashes and nothing
+            else — no bytes, no filenames — so this does not make the service a document store.
+            Disabled, it emits no measurements at all rather than a zero that would read as "no
+            duplicates".</td></tr>
+    <tr><td><code>OTEL_EXPORTER_OTLP_ENDPOINT</code> · <code>_PROTOCOL</code></td><td><em>unset</em></td>
+        <td>Set the endpoint and traces, metrics and logs are exported to a collector. Unset, they
+            are collected in process and the scrape route is the only way out. The protocol is
+            first-class because many collectors accept only <code>http/protobuf</code>.</td></tr>
+    <tr><td><code>Serilog:MinimumLevel:Default</code></td><td><code>Information</code></td>
+        <td>Log verbosity. Document <em>content</em> is never logged at any level, and a test
+            asserts it.</td></tr>
+  </tbody>
+</table>
+
+<h3>Combinations rejected at boot</h3>
+<p>Four rules relate settings to one another. Each is checked before the service accepts traffic,
+because each describes a pod that would otherwise look healthy and behave wrongly.</p>
+<table>
+  <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>MaxRequestFileBytes</code> ≥ <code>MaxFileBytes</code></td>
+        <td>Otherwise a single maximum-size file could never be accepted.</td></tr>
+    <tr><td><code>Admission:BudgetBytes</code> ≥ <code>MaxRequestFileBytes</code> + 1 MiB</td>
+        <td>A budget smaller than the largest admissible request could never serve it — the request
+            would ask for more permits than the pod owns.</td></tr>
+    <tr><td><code>DependencyCheck:TimeoutSeconds</code> &lt; <code>IntervalSeconds</code></td>
+        <td>Otherwise a slow probe overlaps the next tick.</td></tr>
+    <tr><td><code>StartupProbe:TotalTimeoutSeconds</code> ≥ <code>Attempts</code> ×
+            <code>AttemptTimeoutSeconds</code></td>
+        <td>A budget smaller than the attempts it funds truncates the last one — which is the retry
+            that matters, since the two before it have already failed.</td></tr>
+  </tbody>
+</table>
+
+<h3>Deployment-time settings</h3>
+<p>These belong to the Helm release rather than to the service, and have no equivalent inside the
+image:</p>
+<table>
+  <thead><tr><th>Value</th><th>Default</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>image.repository</code> · <code>.tag</code> · <code>.pullPolicy</code></td>
+        <td>the published image · the chart's <code>appVersion</code> · <code>IfNotPresent</code></td>
+        <td>Override for a different registry or a locally built image.</td></tr>
+    <tr><td><code>imagePullSecrets</code></td><td><code>[]</code></td>
+        <td><strong>Names</strong> of secrets that must already exist in the namespace. The chart
+            creates no secret and accepts no credential material.</td></tr>
+    <tr><td><code>serviceAccount.create</code> · <code>.name</code> · <code>.azureClientId</code></td>
+        <td><code>true</code> · the release name · empty</td>
+        <td>Setting the client ID adds the Workload-Identity annotation to the service account and
+            the corresponding label to pods.</td></tr>
+    <tr><td><code>autoscaling.*</code> · <code>replicaCount</code></td>
+        <td>on, 2 to 6 · 2</td>
+        <td>The HPA and its CPU and memory targets; the fixed replica count applies only with
+            autoscaling off.</td></tr>
+    <tr><td><code>resources</code></td><td>requests 250m / 512Mi, limit 2Gi memory</td>
+        <td>Memory is generous because files are buffered whole; there is no CPU limit, since
+            throttling costs more latency than it saves.</td></tr>
+    <tr><td><code>service.port</code></td><td>8090</td>
+        <td>The ClusterIP port. There is no ingress, by design.</td></tr>
+    <tr><td><code>metrics.scrapeAnnotations</code></td><td><code>false</code></td>
+        <td>Adds the <code>prometheus.io/*</code> annotations to pods, for a scraper that reads
+            them.</td></tr>
+    <tr><td><code>extraEnv</code></td><td><code>[]</code></td>
+        <td>Verbatim environment entries, for every key with no first-class value above.</td></tr>
+  </tbody>
+</table>
 
 </body>
 </html>
