@@ -55,20 +55,26 @@
 
 ## 4. Release and verify
 
-- [ ] 4.1 Merge the branch to `main` once the gate is green, and delete the branch.
-- [ ] 4.2 Tag `chart-v0.3.3` and push it. Confirm the release workflow resolves `appVersion` to
+- [x] 4.1 Merge the branch to `main` once the gate is green, and delete the branch.
+- [x] 4.2 Tag `chart-v0.3.3` and push it. Confirm the release workflow resolves `appVersion` to
       `0.3.0` from the existing `v0.3.0` image tag, skips the image job, and publishes only the
       chart.
-- [ ] 4.3 Pull the published chart and prove the fix shipped:
-      `helm registry login ghcr.io`, then
-      `helm pull oci://ghcr.io/arulero/eugo-docint-chart --version 0.3.3`, and confirm the packaged
-      `values.yaml` carries `ghcr.io/arulero/eugo-docint` and `Chart.yaml` carries
-      `appVersion: 0.3.0`.
-- [ ] 4.4 Run the gate as in 1.5 and archive the change.
+- [ ] 4.3 BLOCKED, partially verified. `helm registry login ghcr.io` succeeds with the local token
+      but `helm pull oci://ghcr.io/arulero/eugo-docint-chart --version 0.3.3` returns
+      `403 denied` -- the token carries no `read:packages`, the same blocker as group 3. What the
+      release log does prove: the chart packaged as `--version "0.3.3" --app-version "0.3.0"`,
+      `helm lint` and both renders passed against the packaged artifact, and the push reported
+      `Pushed: ghcr.io/arulero/eugo-docint-chart:0.3.3`
+      `Digest: sha256:5e6844d3e21ea0282603abb1cfd81b147061da15d99c68326b26554e628e3f74`.
+      The packaged `values.yaml` is verified at its source commit rather than in the published
+      artifact. Complete this by granting the scope and re-running the pull.
+- [ ] 4.4 Gate run and green after the release: 222 passed, 0 failed, 7 skipped (the env-gated
+      live suite, which self-skips and proves nothing). Archive is held until group 3 and 4.3 are
+      either answered or explicitly accepted as unverified.
 
 ## 5. Follow-up
 
-- [ ] 5.1 Open a separate proposal for the kind-based install smoke test recorded under design.md's
+- [x] 5.1 Open a separate proposal for the kind-based install smoke test recorded under design.md's
       Deliberately deferred, carrying forward the decision it must make: side-loading the built
       image with `kind load docker-image` proves the chart but not the default coordinate, whereas
       pulling proves both and needs a pull secret built from `GITHUB_TOKEN`. Note that the same test
