@@ -1,7 +1,7 @@
 image:
   # Fully qualified deliberately: a bare `eugo-docint` resolves against Docker Hub and would pull
   # something unrelated, which fails later and less clearly than a wrong registry does.
-  repository: ghcr.io/eugo-as/eugo-docint
+  repository: ghcr.io/arulero/eugo-docint
   # Empty means .Chart.AppVersion
   tag: ""
   pullPolicy: IfNotPresent
