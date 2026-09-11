@@ -145,8 +145,19 @@ so no resource is recreated. Rollback is `helm rollback`, or pinning `image.repo
 ## Open Questions
 
 - Did the `v0.3.0` image and the `eugo-docint-chart` 0.3.2 package move with the organization to
-  `ghcr.io/arulero/*`? Not verifiable from this workstation: both namespaces answer 403 to an
-  anonymous registry probe because the packages are private, and the available GitHub token lacks
-  the `read:packages` scope. Answering it changes nothing about this change's approach or its task
-  breakdown - it only determines whether a re-release is also needed - so it is carried as a
-  verification task rather than a blocker.
+  `ghcr.io/arulero/*`? **Closed unanswered on 2026-09-11**, by decision, not by evidence. It was not
+  verifiable from this workstation: both namespaces answer 403 to an anonymous registry probe
+  because the packages are private, the available GitHub token lacks `read:packages`, and
+  `gh auth refresh` needs an interactive device flow.
+
+  One correction to what this section originally assumed. It said the question "only determines
+  whether a re-release is also needed" and could safely ride along with the release verification.
+  The first half holds; the second does not. The `chart-v0.3.3` release went green without touching
+  the registry's image side at all, because `appVersion` resolution reads `git tag -l "v0.3.*"`.
+  A successful chart release is therefore not evidence that `ghcr.io/arulero/eugo-docint:0.3.0`
+  exists, and the published 0.3.3 chart names an image nobody has confirmed is there.
+
+  This is cheap to settle whenever someone has `read:packages`: list the organization's container
+  packages, or `helm pull` the chart and `docker manifest inspect` the image it names. It is also
+  settled automatically the first time anything installs the chart for real, which is one more
+  reason the install test in `verify-chart-on-a-real-pod` is worth having.

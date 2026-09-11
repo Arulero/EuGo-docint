@@ -60,3 +60,10 @@ Whether the kind test pulls the image or side-loads it.
 These are not exclusive: the cheap side-loaded install can run on every relevant change, and a
 pulling install can run on a narrower trigger. The design should say which triggers which, and must
 not assume a side-loaded test covers the coordinate.
+
+One live unknown makes the pulling variant more valuable than it looks. `retarget-ghcr-namespace`
+closed without establishing whether the `v0.3.0` image survived the organization rename - the
+verification needed a `read:packages` scope that was not granted, and the chart release that
+followed could not answer it, because `appVersion` resolution reads git tags rather than the
+registry. So the chart currently published at 0.3.3 names an image nobody has confirmed exists.
+A pulling install test would settle that on its first run.

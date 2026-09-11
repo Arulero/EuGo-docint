@@ -41,17 +41,31 @@
 
 ## 3. Confirm what survived the organization rename
 
+NOT DONE, closed by decision on 2026-09-11. The user chose to finish the change without granting
+the scope. 3.1 through 3.3 were never executed; the questions they ask remain open.
+
 - [ ] 3.1 Grant the local token the scope needed to see packages: `gh auth refresh -s read:packages`.
-- [ ] 3.2 List the organization's container packages (`gh api "/orgs/Arulero/packages?package_type=container"`)
-      and record whether `eugo-docint` and `eugo-docint-chart` are present, and which versions they
-      hold. This answers design.md's Open Question.
-- [ ] 3.3 If the image `v0.3.0` did not survive the rename, record in the change what re-release is
-      needed - a `v0.3.0` re-tag would fail as an existing tag, so this becomes a decision about
-      cutting a new image version, not a silent retry. If it did survive, note that no re-release is
-      needed and continue.
-- [ ] 3.4 If the `read:packages` scope cannot be granted, do not skip this group: record explicitly
-      that package inventory was blocked and why, and carry 3.2 and 3.3 into the release
-      verification in group 4, where the publish result answers the same question directly.
+      Not granted. `gh auth refresh` also needs `-h github.com` and then runs an interactive device
+      flow, so it cannot be completed from inside a tool call.
+- [ ] 3.2 List the organization's container packages. Never run.
+- [ ] 3.3 Decide on a re-release if the image did not survive. Never reached.
+- [x] 3.4 Blocker recorded, as this task requires. Package inventory was blocked because the local
+      GitHub token carries no `read:packages` scope: `gh api /orgs/Arulero/packages` answers 403,
+      an anonymous GHCR probe answers 403 for every namespace because the packages are private, and
+      `helm pull` of the freshly published chart answers `403 denied` with the same token that had
+      just logged in successfully.
+
+      This task's own fallback -- carry 3.2 and 3.3 into group 4, "where the publish result answers
+      the same question directly" -- turned out to be WRONG, and that matters more than the blocker
+      itself. The `chart-v0.3.3` release succeeded, but it proves nothing about the image: the
+      workflow resolves `appVersion` from `git tag -l "v0.3.*"`, which reads git, not the registry.
+      A green chart release is therefore compatible with `ghcr.io/arulero/eugo-docint:0.3.0` not
+      existing at all.
+
+      What is consequently still unknown: whether the image published under the old organization
+      survived the rename. If it did not, the chart now published at 0.3.3 names an image that is
+      not there -- the same failure shape this change set out to fix, one layer up. Answering it
+      needs only `read:packages` and a `helm pull` or a package listing.
 
 ## 4. Release and verify
 
@@ -68,9 +82,9 @@
       `Digest: sha256:5e6844d3e21ea0282603abb1cfd81b147061da15d99c68326b26554e628e3f74`.
       The packaged `values.yaml` is verified at its source commit rather than in the published
       artifact. Complete this by granting the scope and re-running the pull.
-- [ ] 4.4 Gate run and green after the release: 222 passed, 0 failed, 7 skipped (the env-gated
-      live suite, which self-skips and proves nothing). Archive is held until group 3 and 4.3 are
-      either answered or explicitly accepted as unverified.
+- [x] 4.4 Gate run and green after the release: 222 passed, 0 failed, 7 skipped (the env-gated
+      live suite, which self-skips and proves nothing). Archived 2026-09-11 with group 3 and 4.3
+      explicitly accepted as unverified rather than silently closed.
 
 ## 5. Follow-up
 
