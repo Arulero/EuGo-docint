@@ -419,7 +419,7 @@ Deployment shape — no `appsettings.json` equivalent:
 
 | Value | Default | What it does |
 | --- | --- | --- |
-| `image.repository` | `ghcr.io/eugo-as/eugo-docint` | Override for a different registry or a local image. Always fully qualified — a bare name resolves against Docker Hub |
+| `image.repository` | `ghcr.io/arulero/eugo-docint` | Override for a different registry or a local image. Always fully qualified — a bare name resolves against Docker Hub |
 | `image.tag` | `""` → `.Chart.AppVersion` | `appVersion` is CI-stamped; override only for local images |
 | `imagePullSecrets` | `[]` | **Names** of secrets that must already exist in the namespace. Empty omits the key entirely. The chart creates no Secret and takes no credential material — see Deploy |
 | `image.pullPolicy` | `IfNotPresent` | `Never` for a locally-loaded image |
@@ -563,7 +563,7 @@ install if you want the failure earlier.
 Versioning: chart and image share `major.minor`; the chart patch moves independently
 (`chart-v*` tags release chart-only changes). CI stamps `appVersion` — never hand-edit it.
 Tag `vX.Y.Z` → image + chart to GHCR; tag `chart-vX.Y.P` → chart only. The image publishes to
-`ghcr.io/eugo-as/eugo-docint` and the chart to `ghcr.io/eugo-as/eugo-docint-chart` — separate
+`ghcr.io/arulero/eugo-docint` and the chart to `ghcr.io/arulero/eugo-docint-chart` — separate
 repositories on purpose, since the two share a `major.minor` and would otherwise contend for the
 same tag. Cluster provisioning (AKS, identity federation) and release execution live outside this
 repo.

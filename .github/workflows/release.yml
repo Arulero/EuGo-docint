@@ -33,7 +33,7 @@ jobs:
     needs: build-test
     steps:
       - uses: actions/checkout@v7
-      # The owning org is spelled EuGo-AS and an OCI reference may not contain capitals, while
+      # The owning org is spelled Arulero and an OCI reference may not contain capitals, while
       # ${{ github.repository_owner }} expands verbatim. Lowercased HERE, once, and read by both
       # jobs -- docker/metadata-action lowercases its own `images:` input silently, but the chart
       # push has no such helper, so relying on that would leave the chart half correct by accident
